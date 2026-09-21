@@ -2,15 +2,60 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CustomerSummary } from '../types';
 import { formatCurrency, formatDateDisplay, formatTimeDisplay } from '../lib/utils';
-import { Users, Search, Phone, MessageSquare, X, CheckCircle2 } from 'lucide-react';
+import { getOrCreateCustomer } from '../lib/api';
+import { useUIStore } from '../stores/useUIStore';
+import { Users, Search, Phone, MessageSquare, X, CheckCircle2, Plus, UserPlus } from 'lucide-react';
 
 interface CustomersPageProps {
   customers: CustomerSummary[];
+  refetch?: () => Promise<void>;
 }
 
-export const CustomersPage: React.FC<CustomersPageProps> = ({ customers }) => {
+export const CustomersPage: React.FC<CustomersPageProps> = ({ customers, refetch }) => {
+  const { showToast } = useUIStore();
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerSummary | null>(null);
+
+  // Add Customer Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [newName, setNewName] = useState<string>('');
+  const [newPhone, setNewPhone] = useState<string>('');
+  const [newTeamName, setNewTeamName] = useState<string>('');
+  const [formError, setFormError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    const cleanName = newName.trim();
+    const cleanPhone = newPhone.replace(/\D/g, '');
+
+    if (!cleanName || cleanName.length < 2) {
+      setFormError('Please enter a valid customer name (at least 2 characters).');
+      return;
+    }
+
+    if (!cleanPhone || cleanPhone.length < 10) {
+      setFormError('Please enter a valid 10-digit phone number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await getOrCreateCustomer(cleanName, cleanPhone, newTeamName.trim() || undefined);
+      showToast(`👤 Player ${cleanName} added to directory!`, 'success');
+      setIsAddModalOpen(false);
+      setNewName('');
+      setNewPhone('');
+      setNewTeamName('');
+      if (refetch) await refetch();
+    } catch (err: any) {
+      setFormError(err?.message || 'Failed to add customer.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const filtered = customers.filter((c) => {
     if (!searchQuery.trim()) return true;
@@ -26,7 +71,7 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ customers }) => {
 
   return (
     <div className="space-y-4 pb-20 md:pb-8">
-      {/* Search Header */}
+      {/* Search & Actions Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#18181b] p-4 rounded-2xl border border-[#27272a]">
         <div>
           <h2 className="text-lg font-bold text-[#f4f4f5] flex items-center gap-2">
@@ -38,23 +83,38 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ customers }) => {
           </p>
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Search by name, phone, team..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#09090b] border border-[#27272a] rounded-xl pl-9 pr-3 py-2 text-xs text-[#f4f4f5] placeholder-[#71717a] focus:outline-hidden focus:border-emerald-500"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#f4f4f5]"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <div className="relative flex-1 sm:w-72">
+            <Search className="w-4 h-4 text-[#71717a] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Search by name, phone, team..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-[#09090b] border border-[#27272a] rounded-xl pl-9 pr-8 py-2 text-xs text-[#f4f4f5] placeholder-[#71717a] focus:outline-hidden focus:border-emerald-500"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#71717a] hover:text-[#f4f4f5]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              setFormError(null);
+              setIsAddModalOpen(true);
+            }}
+            className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <UserPlus className="w-4 h-4 stroke-[2.5]" />
+            <span className="hidden xs:inline">Add Customer</span>
+            <span className="xs:hidden">Add</span>
+          </button>
         </div>
       </div>
 
@@ -251,6 +311,104 @@ export const CustomersPage: React.FC<CustomersPageProps> = ({ customers }) => {
                 <span>Open WhatsApp</span>
               </a>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Customer Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
+          <div 
+            className="w-full max-w-md bg-[#09090b] border border-[#27272a] rounded-2xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-[#18181b] border-b border-[#27272a] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-sm">
+                  👤
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-[#f4f4f5]">
+                    Add New Customer / Team
+                  </h3>
+                  <p className="text-[11px] text-[#a1a1aa]">
+                    Register a new regular player or cricket club
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAddModalOpen(false)}
+                className="p-1.5 rounded-lg bg-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddCustomer} className="p-4 sm:p-5 space-y-3.5">
+              {formError && (
+                <div className="p-2.5 rounded-lg bg-rose-950/60 border border-rose-500 text-rose-300 text-xs font-medium">
+                  {formError}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sanjeev Kumar"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full bg-[#18181b] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Phone Number (10 Digits) *
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  className="w-full bg-[#18181b] border border-[#27272a] rounded-lg px-3 py-2 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Team / Club / Academy (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Rising Stars CC / Under-16 Batch"
+                  value={newTeamName}
+                  onChange={(e) => setNewTeamName(e.target.value)}
+                  className="w-full bg-[#18181b] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-[#27272a]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-3.5 py-2 rounded-lg bg-[#27272a] hover:bg-[#3f3f46] text-[#f4f4f5] text-xs font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Saving...' : 'Add Customer'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

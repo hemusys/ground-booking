@@ -101,43 +101,43 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
 
   // 1. Initialize form when opened
   useEffect(() => {
-    if (isOpen) {
-      if (initialFacilityId && facilities.some(f => f.id === initialFacilityId)) {
-        setFacilityId(initialFacilityId);
-      } else if (facilities.length > 0) {
-        setFacilityId(facilities[0].id);
-      }
-      if (initialDate) {
-        setDate(initialDate);
-        setRepeatEndDate(format(addWeeks(parseISO(initialDate), 4), 'yyyy-MM-dd'));
-      }
-      if (initialTime) {
-        setStartTime(initialTime);
-        const [h, m] = initialTime.split(':').map(Number);
-        const endH = (h + 2) % 24;
-        const endM = (m + 30) % 60;
-        setEndTime(`${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`);
-      }
-      if (initPhone) setPhone(initPhone);
-      if (initName) setName(initName);
+    if (!isOpen) return;
 
-      setRepeatType('NONE');
-      setRecurrenceConflictResult(null);
-      setIsRecurrenceModalOpen(false);
-      setAllowBlacklistOverride(false);
-      setConflictError(null);
-      setValidationErrors({});
-      setIsPendingManuallyEdited(false);
-      setPendingAdjustmentReason('');
-      setAllowDueOverride(false);
-
-      fetchCustomerSummaries()
-        .then(summaries => {
-          setQuickCustomers(summaries.slice(0, 4));
-        })
-        .catch(() => {});
+    if (initialFacilityId && facilities.some(f => f.id === initialFacilityId)) {
+      setFacilityId(initialFacilityId);
+    } else if (facilities.length > 0) {
+      setFacilityId(facilities[0].id);
     }
-  }, [isOpen, initialFacilityId, initialDate, initialTime, initPhone, initName, facilities]);
+    if (initialDate) {
+      setDate(initialDate);
+      setRepeatEndDate(format(addWeeks(parseISO(initialDate), 4), 'yyyy-MM-dd'));
+    }
+    if (initialTime) {
+      setStartTime(initialTime);
+      const [h, m] = initialTime.split(':').map(Number);
+      const endH = (h + 2) % 24;
+      const endM = (m + 30) % 60;
+      setEndTime(`${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`);
+    }
+    if (initPhone) setPhone(initPhone);
+    if (initName) setName(initName);
+
+    setRepeatType('NONE');
+    setRecurrenceConflictResult(null);
+    setIsRecurrenceModalOpen(false);
+    setAllowBlacklistOverride(false);
+    setConflictError(null);
+    setValidationErrors({});
+    setIsPendingManuallyEdited(false);
+    setPendingAdjustmentReason('');
+    setAllowDueOverride(false);
+
+    fetchCustomerSummaries()
+      .then(summaries => {
+        setQuickCustomers(summaries.slice(0, 4));
+      })
+      .catch(() => {});
+  }, [isOpen, initialFacilityId, initialDate, initialTime, initPhone, initName]);
 
   // 2. Auto-calculate duration & total fee when start_time or end_time changes
   const [sh, sm] = startTime.split(':').map(Number);
@@ -147,27 +147,31 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
   const isEndTimeInvalid = endMinsTotal <= startMinsTotal;
   const calculatedDurationMins = isEndTimeInvalid ? 0 : endMinsTotal - startMinsTotal;
 
+  const currentFacilityRate = facilities.find(f => f.id === facilityId)?.hourly_rate || 0;
+
   useEffect(() => {
-    const selectedFacility = facilities.find(f => f.id === facilityId);
-    if (selectedFacility && calculatedDurationMins > 0) {
+    if (!isOpen) return;
+    if (currentFacilityRate > 0 && calculatedDurationMins > 0) {
       const hours = calculatedDurationMins / 60;
-      const computedFee = Math.round(selectedFacility.hourly_rate * hours);
+      const computedFee = Math.round(currentFacilityRate * hours);
       setTotalAmount(computedFee);
       if (!isPendingManuallyEdited) {
         setCustomPendingAmount(Math.max(0, computedFee - advancePaid));
       }
     }
-  }, [facilityId, calculatedDurationMins, facilities, advancePaid, isPendingManuallyEdited]);
+  }, [isOpen, facilityId, currentFacilityRate, calculatedDurationMins, advancePaid, isPendingManuallyEdited]);
 
   // 3. Keep pending balance synchronized if not manually edited
   useEffect(() => {
+    if (!isOpen) return;
     if (!isPendingManuallyEdited) {
       setCustomPendingAmount(Math.max(0, totalAmount - advancePaid));
     }
-  }, [totalAmount, advancePaid, isPendingManuallyEdited]);
+  }, [isOpen, totalAmount, advancePaid, isPendingManuallyEdited]);
 
   // 4. Phone substring auto-lookup for customer context & blacklist detection (Priority 3)
   useEffect(() => {
+    if (!isOpen) return;
     const cleanPhone = phone.replace(/\D/g, '');
     if (cleanPhone.length >= 3) {
       const timer = setTimeout(async () => {
@@ -185,11 +189,11 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
     } else {
       setExistingCustomer(null);
     }
-  }, [phone]);
+  }, [phone, isOpen]);
 
   // 5. Single Conflict detection
   useEffect(() => {
-    if (!facilityId || !date || !startTime || !endTime || isEndTimeInvalid || repeatType !== 'NONE') return;
+    if (!isOpen || !facilityId || !date || !startTime || !endTime || isEndTimeInvalid || repeatType !== 'NONE') return;
     const { startIso, endIso } = createSafeBookingInterval(date, startTime, endTime);
 
     checkBookingConflict(facilityId, startIso, endIso).then(res => {
@@ -199,7 +203,7 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
         setConflictError(null);
       }
     });
-  }, [facilityId, date, startTime, endTime, isEndTimeInvalid, repeatType]);
+  }, [isOpen, facilityId, date, startTime, endTime, isEndTimeInvalid, repeatType]);
 
   // Recurring calculation preview
   const recurringDates = repeatType !== 'NONE' 

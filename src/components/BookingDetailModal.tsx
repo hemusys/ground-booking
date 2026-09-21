@@ -53,22 +53,22 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const [activeTab, setActiveTab] = useState<'details' | 'timeline'>('details');
 
   useEffect(() => {
+    if (!booking) return;
     if (initialFacilities.length > 0) {
       setFacilities(initialFacilities);
     } else {
       fetchFacilities().then(setFacilities);
     }
-  }, [initialFacilities]);
+  }, [booking?.id, initialFacilities.length]);
 
   useEffect(() => {
-    if (booking?.id) {
-      if (booking.audit_logs && booking.audit_logs.length > 0) {
-        setAuditLogs(booking.audit_logs);
-      } else {
-        fetchBookingAuditLogs(booking.id).then(setAuditLogs);
-      }
+    if (!booking?.id) return;
+    if (booking.audit_logs && booking.audit_logs.length > 0) {
+      setAuditLogs(booking.audit_logs);
+    } else {
+      fetchBookingAuditLogs(booking.id).then(setAuditLogs);
     }
-  }, [booking]);
+  }, [booking?.id]);
 
   if (!booking) return null;
 

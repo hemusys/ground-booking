@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#18181b"/>
+    </linearGradient>
+    <linearGradient id="emeraldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
+    <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Rounded Base Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)"/>
+  
+  <!-- Emerald Pitch Outer Circle -->
+  <circle cx="256" cy="256" r="184" fill="#042f2e" stroke="#10b981" stroke-width="6" opacity="0.8"/>
+  <circle cx="256" cy="256" r="130" fill="none" stroke="#10b981" stroke-width="3" stroke-dasharray="8 8" opacity="0.6"/>
+  
+  <!-- Cricket Pitch Rectangle -->
+  <rect x="220" y="140" width="72" height="232" rx="10" fill="#134e4a" stroke="#34d399" stroke-width="3"/>
+  <line x1="220" y1="180" x2="292" y2="180" stroke="#f4f4f5" stroke-width="3" opacity="0.9"/>
+  <line x1="220" y1="332" x2="292" y2="332" stroke="#f4f4f5" stroke-width="3" opacity="0.9"/>
+  
+  <!-- Stumps / Wickets top & bottom -->
+  <circle cx="236" cy="172" r="3" fill="#f4f4f5"/>
+  <circle cx="256" cy="172" r="3" fill="#f4f4f5"/>
+  <circle cx="276" cy="172" r="3" fill="#f4f4f5"/>
+  <circle cx="236" cy="340" r="3" fill="#f4f4f5"/>
+  <circle cx="256" cy="340" r="3" fill="#f4f4f5"/>
+  <circle cx="276" cy="340" r="3" fill="#f4f4f5"/>
+  
+  <!-- Crossed Cricket Bats Icon -->
+  <g transform="translate(256, 256)">
+    <!-- Cricket Ball in center with seam -->
+    <circle cx="0" cy="0" r="36" fill="#e11d48" stroke="#be123c" stroke-width="3"/>
+    <path d="M -24 -24 Q 0 0 24 24" fill="none" stroke="#ffffff" stroke-width="3" stroke-dasharray="3 3"/>
+    <circle cx="0" cy="0" r="12" fill="#fda4af" opacity="0.5"/>
+  </g>
+  
+  <!-- Accent Badge -->
+  <circle cx="390" cy="122" r="28" fill="url(#emeraldGrad)"/>
+  <text x="390" y="132" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="900" fill="#09090b" text-anchor="middle">?</text>
+</svg>

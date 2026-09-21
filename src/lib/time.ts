@@ -16,8 +16,8 @@ export function createSafeBookingInterval(
   const [sh, sm] = startTimeStr.split(':').map(Number);
   const [eh, em] = endTimeStr.split(':').map(Number);
 
-  const startDate = new Date(`${dateStr}T${startTimeStr}:00`);
-  let endDate = new Date(`${dateStr}T${endTimeStr}:00`);
+  const startDate = parseISO(`${dateStr}T${startTimeStr}:00`);
+  let endDate = parseISO(`${dateStr}T${endTimeStr}:00`);
 
   let durationMins = (eh * 60 + em) - (sh * 60 + sm);
 
@@ -43,21 +43,31 @@ export function getTimelineCoordinates(
   viewDateStr: string,
   hourWidthPx: number = DEFAULT_HOUR_WIDTH_PX
 ): { left: number; width: number; isVisibleOnDate: boolean } {
-  const bStart = parseISO(startIso);
-  const bEnd = parseISO(endIso);
+  try {
+    const bStart = parseISO(startIso);
+    const bEnd = parseISO(endIso);
+    const timelineOrigin = parseISO(`${viewDateStr}T05:00:00`);
 
-  // Timeline zero reference: viewDate at 05:00 AM
-  const timelineOrigin = new Date(`${viewDateStr}T05:00:00`);
-  const startOffsetMins = differenceInMinutes(bStart, timelineOrigin);
-  const durationMins = differenceInMinutes(bEnd, bStart);
+    if (isNaN(bStart.getTime()) || isNaN(bEnd.getTime()) || isNaN(timelineOrigin.getTime())) {
+      return { left: 0, width: 0, isVisibleOnDate: false };
+    }
 
-  const left = (startOffsetMins / 60) * hourWidthPx;
-  const width = Math.max((durationMins / 60) * hourWidthPx, 44);
+    const startOffsetMins = differenceInMinutes(bStart, timelineOrigin);
+    const durationMins = differenceInMinutes(bEnd, bStart);
 
-  // Visible if within the 21-hour window (0 to 21 hours)
-  const isVisibleOnDate = startOffsetMins >= -60 && startOffsetMins <= TIMELINE_TOTAL_HOURS * 60;
+    const left = (startOffsetMins / 60) * hourWidthPx;
+    const width = Math.max((durationMins / 60) * hourWidthPx, 44);
 
-  return { left, width, isVisibleOnDate };
+    const isVisibleOnDate = startOffsetMins >= -60 && startOffsetMins <= TIMELINE_TOTAL_HOURS * 60;
+
+    return {
+      left: isNaN(left) ? 0 : Math.round(left),
+      width: isNaN(width) ? 44 : Math.round(width),
+      isVisibleOnDate: Boolean(isVisibleOnDate),
+    };
+  } catch {
+    return { left: 0, width: 0, isVisibleOnDate: false };
+  }
 }
 
 /**

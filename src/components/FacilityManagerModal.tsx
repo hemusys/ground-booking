@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Facility, FacilityType } from '../types';
 import { formatCurrency } from '../lib/utils';
+import { useUIStore } from '../stores/useUIStore';
 import { X, Plus, Trash2, Edit2, Check, Settings } from 'lucide-react';
 
 interface FacilityManagerModalProps {
@@ -18,6 +19,7 @@ export const FacilityManagerModal: React.FC<FacilityManagerModalProps> = ({
   onSaveFacility,
   onDeleteFacility,
 }) => {
+  const { showToast } = useUIStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState<string>('');
   const [type, setType] = useState<FacilityType>('NET');
@@ -53,6 +55,7 @@ export const FacilityManagerModal: React.FC<FacilityManagerModalProps> = ({
       hourly_rate: Number(hourlyRate),
     });
 
+    showToast(`🏟️ Facility "${name.trim()}" saved successfully!`, 'success');
     setEditingId(null);
     setIsAdding(false);
   };
@@ -60,6 +63,7 @@ export const FacilityManagerModal: React.FC<FacilityManagerModalProps> = ({
   const handleDelete = async (id: string, facName: string) => {
     if (window.confirm(`Are you sure you want to delete ${facName}?`)) {
       await onDeleteFacility(id);
+      showToast(`🗑️ Facility "${facName}" removed.`, 'info');
     }
   };
 

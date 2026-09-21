@@ -45,18 +45,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   const [facilityTypeFilter, setFacilityTypeFilter] = React.useState<'ALL' | 'GROUND' | 'NET' | 'TURF_NET'>('ALL');
 
-  const filteredFacilities = facilities.filter(f => {
-    if (facilityTypeFilter === 'ALL') return true;
-    return f.type === facilityTypeFilter;
-  });
+  const filteredFacilities = React.useMemo(() => {
+    if (facilityTypeFilter === 'ALL') return facilities;
+    return facilities.filter(f => f.type === facilityTypeFilter);
+  }, [facilities, facilityTypeFilter]);
 
-  const filteredBookings = bookings.filter(b => {
-    if (facilityTypeFilter === 'ALL') return true;
-    return b.facility?.type === facilityTypeFilter;
-  });
+  const filteredBookings = React.useMemo(() => {
+    if (facilityTypeFilter === 'ALL') return bookings;
+    return bookings.filter(b => b.facility?.type === facilityTypeFilter);
+  }, [bookings, facilityTypeFilter]);
 
-  const activeBookingDetail = bookings.find(b => b.id === activeBookingDetailId) || null;
-  const activeBookingForPayment = bookings.find(b => b.id === activeCollectPaymentBookingId) || null;
+  const activeBookingDetail = React.useMemo(() => {
+    return bookings.find(b => b.id === activeBookingDetailId) || null;
+  }, [bookings, activeBookingDetailId]);
+
+  const activeBookingForPayment = React.useMemo(() => {
+    return bookings.find(b => b.id === activeCollectPaymentBookingId) || null;
+  }, [bookings, activeCollectPaymentBookingId]);
+
+  const parsedDate = React.useMemo(() => {
+    return parseISO(`${selectedDate}T00:00:00`);
+  }, [selectedDate]);
 
   const handleSlotClick = (facility: Facility, timeSlot: string) => {
     openQuickBook({
@@ -116,8 +125,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     await deleteFacility(id);
     await refetch();
   };
-
-  const parsedDate = parseISO(`${selectedDate}T00:00:00`);
 
   return (
     <div className="space-y-3 pb-20 md:pb-8">
@@ -256,6 +263,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
       <BookingDetailModal
         booking={activeBookingDetail}
+        facilities={facilities}
         onClose={closeBookingDetail}
         onOpenCollectPayment={(b) => openCollectPayment(b.id)}
         onCancelBooking={handleCancelBooking}

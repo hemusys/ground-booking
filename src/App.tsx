@@ -139,6 +139,7 @@ function AppContent() {
             element={
               <CustomersPage
                 customers={customers}
+                refetch={handleRefetchAll}
               />
             }
           />

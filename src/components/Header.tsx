@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { addDays, format, parseISO, subDays } from 'date-fns';
 import { MiniCalendarPicker } from './ui/MiniCalendarPicker';
+import { InstallPwaButton } from './ui/InstallPwaButton';
 
 interface HeaderProps {
   stats?: {
@@ -216,6 +217,9 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
               )}
             </div>
           )}
+
+          {/* PWA Install Action */}
+          <InstallPwaButton />
 
           {/* Settings Trigger */}
           <button

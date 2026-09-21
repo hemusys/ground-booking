@@ -24,6 +24,8 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
 
+  const hasScrolledRef = useRef(false);
+
   // Update current time every 60 seconds
   useEffect(() => {
     const timer = setInterval(() => {
@@ -33,17 +35,24 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
   }, []);
 
   // Hour marks 05:00 to 02:00 (Next Day)
-  const hours = Array.from({ length: TIMELINE_TOTAL_HOURS }, (_, i) => {
-    const hour24 = (TIMELINE_START_HOUR + i) % 24;
-    const isNextDay = TIMELINE_START_HOUR + i >= 24;
-    const period = hour24 >= 12 ? 'PM' : 'AM';
-    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-    return {
-      hour24,
-      display: `${hour12} ${period}${isNextDay ? ' (+1)' : ''}`,
-      rawIndex: i,
-    };
-  });
+  const hours = React.useMemo(() => {
+    return Array.from({ length: TIMELINE_TOTAL_HOURS }, (_, i) => {
+      const hour24 = (TIMELINE_START_HOUR + i) % 24;
+      const isNextDay = TIMELINE_START_HOUR + i >= 24;
+      const period = hour24 >= 12 ? 'PM' : 'AM';
+      const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+      return {
+        hour24,
+        display: `${hour12} ${period}${isNextDay ? ' (+1)' : ''}`,
+        rawIndex: i,
+      };
+    });
+  }, []);
+
+  // Reset auto-scroll flag when date changes
+  useEffect(() => {
+    hasScrolledRef.current = false;
+  }, [selectedDateStr]);
 
   // Calculate current time line offset if today is selected
   const isViewingToday = isSameDay(selectedDate, currentTime);
@@ -56,8 +65,9 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
 
   // Auto-scroll near current time on load
   useEffect(() => {
-    if (scrollContainerRef.current && currentPositionPx > 250) {
+    if (!hasScrolledRef.current && scrollContainerRef.current && currentPositionPx > 250) {
       scrollContainerRef.current.scrollLeft = currentPositionPx - 180;
+      hasScrolledRef.current = true;
     }
   }, [currentPositionPx]);
 

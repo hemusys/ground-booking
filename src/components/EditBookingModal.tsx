@@ -6,6 +6,7 @@ import { checkBookingConflict, updateBooking } from '../lib/api';
 import { TimeSlotSelect } from './ui/TimeSlotSelect';
 import { ConflictModal } from './ui/ConflictModal';
 import { quickBookingSchema } from '../lib/schemas';
+import { useUIStore } from '../stores/useUIStore';
 import {
   X,
   AlertTriangle,
@@ -65,6 +66,7 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
   const [editSeriesMode, setEditSeriesMode] = useState<'THIS_ONLY' | 'FUTURE_SERIES'>('THIS_ONLY');
 
   // Conflict & Validation States
+  const { showToast } = useUIStore();
   const [conflictingBooking, setConflictingBooking] = useState<Booking | null>(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -156,13 +158,14 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
     setIsSubmitting(true);
     try {
       await updateBooking(payload);
+      showToast('🏏 Booking rescheduled & updated successfully!', 'success');
       setToastMessage('Booking rescheduled & updated successfully!');
       setTimeout(async () => {
         await onSuccess();
         onClose();
-      }, 500);
+      }, 300);
     } catch (err: any) {
-      alert(err?.message || 'Failed to update booking.');
+      showToast(err?.message || 'Failed to update booking.', 'error');
     } finally {
       setIsSubmitting(false);
     }
