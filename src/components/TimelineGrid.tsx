@@ -3,7 +3,9 @@ import { Facility, Booking } from '../types';
 import { formatCurrency, formatTimeDisplay } from '../lib/utils';
 import { TIMELINE_START_HOUR, TIMELINE_TOTAL_HOURS, DEFAULT_HOUR_WIDTH_PX, getTimelineCoordinates } from '../lib/time';
 import { format, isSameDay, differenceInMinutes, addMinutes, startOfDay } from 'date-fns';
-import { Clock, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
+import { useUIStore } from '../stores/useUIStore';
+import { getMaskedBookingsForRole } from '../lib/api';
 
 interface TimelineGridProps {
   facilities: Facility[];
@@ -20,6 +22,11 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
   onSlotClick,
   onBookingClick,
 }) => {
+  const { currentRole, activeBrokerId } = useUIStore();
+  const displayBookings = React.useMemo(() => {
+    return getMaskedBookingsForRole(bookings, currentRole, activeBrokerId);
+  }, [bookings, currentRole, activeBrokerId]);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -170,7 +177,7 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
 
             {/* Facility Rows with Clickable Slots */}
             {facilities.map((fac) => {
-              const facBookings = bookings.filter((b) => b.facility_id === fac.id);
+              const facBookings = displayBookings.filter((b) => b.facility_id === fac.id);
 
               return (
                 <div
@@ -209,8 +216,44 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
                     const { left, width, isVisibleOnDate } = getTimelineCoordinates(b.start_time, b.end_time, selectedDateStr);
                     if (!isVisibleOnDate) return null;
 
+                    const isMasked = b.is_masked;
                     const isPaid = b.payment_status === 'FULLY_PAID';
                     const isPartial = b.payment_status === 'PARTIALLY_PAID';
+
+                    if (isMasked) {
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onBookingClick(b);
+                          }}
+                          style={{
+                            left: `${left}px`,
+                            width: `${width}px`,
+                          }}
+                          className="absolute top-1.5 bottom-1.5 rounded-lg border px-2.5 py-1 z-10 cursor-pointer overflow-hidden bg-zinc-800/90 border-zinc-600 text-zinc-300 shadow-md hover:border-zinc-400"
+                        >
+                          <div className="flex items-center justify-between gap-1 leading-tight">
+                            <span className="font-bold text-xs flex items-center gap-1 text-zinc-200">
+                              <Lock className="w-3 h-3 text-zinc-400" /> BOOKED
+                            </span>
+                            <span className="text-[10px] font-mono text-zinc-400">
+                              {formatTimeDisplay(b.start_time)}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-zinc-400 mt-0.5 truncate">
+                            Slot Reserved
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const matchLabel = b.team_b_name
+                      ? `🏏 ${b.team_a_name || b.customer?.name} vs ${b.team_b_name}`
+                      : b.customer?.team_name
+                      ? `🏏 ${b.customer.team_name}`
+                      : formatTimeDisplay(b.start_time);
 
                     return (
                       <div
@@ -233,30 +276,38 @@ export const TimelineGrid: React.FC<TimelineGridProps> = ({
                       >
                         <div className="flex items-center justify-between gap-1 leading-tight">
                           <span className="font-bold text-xs truncate">
-                            {b.customer?.name || 'Customer'}
+                            {b.customer?.name || b.team_a_name || 'Customer'}
                           </span>
-                          <span className="font-mono-numeric text-[11px] font-semibold shrink-0">
-                            {formatCurrency(b.total_amount)}
-                          </span>
+                          {currentRole === 'OWNER' ? (
+                            <span className="font-mono-numeric text-[11px] font-semibold shrink-0">
+                              {formatCurrency(b.total_amount)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono text-emerald-300">
+                              My Booking
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center justify-between gap-1 text-[10px] text-[#f4f4f5]/80 mt-0.5 truncate">
                           <span className="truncate">
-                            {b.customer?.team_name ? `🏏 ${b.customer.team_name}` : formatTimeDisplay(b.start_time)}
+                            {matchLabel}
                           </span>
 
-                          {isPaid ? (
-                            <span className="shrink-0 flex items-center text-emerald-400 font-medium">
-                              <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> Paid
-                            </span>
-                          ) : isPartial ? (
-                            <span className="shrink-0 flex items-center text-amber-400 font-semibold font-mono">
-                              Due: ₹{b.pending_amount}
-                            </span>
-                          ) : (
-                            <span className="shrink-0 flex items-center text-rose-400 font-semibold font-mono">
-                              UNPAID
-                            </span>
+                          {currentRole === 'OWNER' && (
+                            isPaid ? (
+                              <span className="shrink-0 flex items-center text-emerald-400 font-medium">
+                                <CheckCircle2 className="w-2.5 h-2.5 mr-0.5" /> Paid
+                              </span>
+                            ) : isPartial ? (
+                              <span className="shrink-0 flex items-center text-amber-400 font-semibold font-mono">
+                                Due: ₹{b.pending_amount}
+                              </span>
+                            ) : (
+                              <span className="shrink-0 flex items-center text-rose-400 font-semibold font-mono">
+                                UNPAID
+                              </span>
+                            )
                           )}
                         </div>
 

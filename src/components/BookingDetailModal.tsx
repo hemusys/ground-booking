@@ -22,8 +22,13 @@ import {
   Banknote,
   QrCode,
   DollarSign,
-  AlertTriangle
+  AlertTriangle,
+  Tag,
+  UserCheck,
+  Building,
+  Users
 } from 'lucide-react';
+import { useUIStore } from '../stores/useUIStore';
 import { EditBookingModal } from './EditBookingModal';
 
 interface BookingDetailModalProps {
@@ -72,12 +77,20 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
 
   if (!booking) return null;
 
+  const { currentRole, activeBrokerId } = useUIStore();
+  const isOwner = currentRole === 'OWNER';
+  const isOwnBrokerBooking = currentRole === 'BROKER' && booking.broker_id === activeBrokerId;
+  const isMaskedBooking = booking.is_masked;
+
   const isPaid = booking.payment_status === 'FULLY_PAID';
   const isPartial = booking.payment_status === 'PARTIALLY_PAID';
   const pendingAmount = booking.pending_amount || 0;
 
   const durationMins = differenceInMinutes(parseISO(booking.end_time), parseISO(booking.start_time));
   const formattedDuration = formatDurationLabel(durationMins);
+
+  const teamA = booking.team_a_name || booking.customer?.team_name || booking.customer?.name || 'Team A';
+  const teamB = booking.team_b_name;
 
   const whatsAppLink = buildWhatsAppBookingLink({
     phone: booking.customer?.phone || '',
@@ -212,36 +225,79 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
         </div>
 
         {/* Tab Switcher */}
-        <div className="flex border-b border-[#27272a] bg-[#121214] px-4 pt-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab('details')}
-            className={`pb-2 text-xs font-bold border-b-2 mr-4 transition-colors ${
-              activeTab === 'details'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
-            }`}
-          >
-            Booking Details
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('timeline')}
-            className={`pb-2 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'timeline'
-                ? 'border-emerald-500 text-emerald-400'
-                : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
-            }`}
-          >
-            <History className="w-3.5 h-3.5" />
-            <span>Activity Timeline ({auditLogs.length})</span>
-          </button>
-        </div>
+        {!isMaskedBooking && (
+          <div className="flex border-b border-[#27272a] bg-[#121214] px-4 pt-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`pb-2 text-xs font-bold border-b-2 mr-4 transition-colors ${
+                activeTab === 'details'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+              }`}
+            >
+              Booking Details
+            </button>
+            {isOwner && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('timeline')}
+                className={`pb-2 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
+                  activeTab === 'timeline'
+                    ? 'border-emerald-500 text-emerald-400'
+                    : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>Activity Timeline ({auditLogs.length})</span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Body Container */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-          {activeTab === 'details' ? (
+          {isMaskedBooking ? (
+            /* Masked Privacy View for other brokers */
+            <div className="py-8 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-zinc-800 border border-zinc-700 mx-auto flex items-center justify-center text-zinc-400">
+                <Building className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-[#f4f4f5] uppercase tracking-wider">Slot Booked</h4>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  This slot is reserved by another client or organizer.
+                </p>
+                <p className="text-[11px] text-[#71717a] mt-2 font-mono">
+                  {formatTimeDisplay(booking.start_time)} – {formatTimeDisplay(booking.end_time)} ({formattedDuration})
+                </p>
+              </div>
+            </div>
+          ) : activeTab === 'details' ? (
             <>
+              {/* Matchup Header (Team A vs Team B) */}
+              {teamB ? (
+                <div className="p-3.5 bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-emerald-950/40 border border-emerald-500/30 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold uppercase tracking-wider">
+                    <span className="flex items-center gap-1"><Users className="w-3 h-3" /> Team vs Team Match</span>
+                    <span className="font-mono">{booking.facility?.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-center py-1">
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-[#f4f4f5] block leading-tight truncate">{teamA}</span>
+                      <span className="text-[10px] text-[#71717a]">Team A (Host)</span>
+                    </div>
+                    <div className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold font-mono shrink-0">
+                      VS
+                    </div>
+                    <div className="flex-1">
+                      <span className="text-xs font-bold text-[#f4f4f5] block leading-tight truncate">{teamB}</span>
+                      <span className="text-[10px] text-[#71717a]">Team B (Opponent)</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Time & Duration */}
               <div className="p-3.5 bg-[#18181b] border border-[#27272a] rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
@@ -255,9 +311,31 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     </div>
                   </div>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-md bg-[#27272a] text-[#a1a1aa] font-medium">
-                  {booking.facility?.type}
-                </span>
+                <div className="flex flex-col items-end gap-1">
+                  <span className="text-xs px-2.5 py-1 rounded-md bg-[#27272a] text-[#a1a1aa] font-medium">
+                    {booking.facility?.type}
+                  </span>
+                </div>
+              </div>
+
+              {/* Booking Attribution & Source Badge */}
+              <div className="p-3 bg-[#18181b] border border-[#27272a] rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="text-[#a1a1aa]">Source:</span>
+                  <span className="font-semibold text-[#f4f4f5]">
+                    {booking.booking_source === 'BROKER'
+                      ? 'Broker'
+                      : booking.booking_source === 'ONLINE'
+                      ? 'Online Booking'
+                      : 'Direct Booking'}
+                  </span>
+                </div>
+                {booking.broker && (
+                  <span className="px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-500/30 text-[11px] font-bold">
+                    {booking.broker.name} ({booking.broker.code})
+                  </span>
+                )}
               </div>
 
               {/* Customer Info & Quick Action */}
@@ -267,7 +345,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                     <div className="text-sm font-bold text-[#f4f4f5]">
                       {booking.customer?.name}
                     </div>
-                    {booking.customer?.team_name && (
+                    {booking.customer?.team_name && !teamB && (
                       <div className="text-xs text-emerald-400 font-medium">
                         🏏 {booking.customer.team_name}
                       </div>
@@ -305,133 +383,151 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
                 )}
               </div>
 
-              {/* Ledger Breakdown & Pending Adjustment */}
-              <div className="p-3.5 bg-[#18181b] border border-[#27272a] rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#a1a1aa]">Total Booking Fee:</span>
-                  <span className="font-bold font-mono-numeric text-base text-[#f4f4f5]">
-                    {formatCurrency(booking.total_amount)}
-                  </span>
-                </div>
+              {/* Owner Ledger & Financial Breakdown */}
+              {isOwner && (
+                <div className="p-3.5 bg-[#18181b] border border-[#27272a] rounded-xl space-y-2.5">
+                  {/* Special Discount Breakdown */}
+                  {booking.discount_amount && booking.discount_amount > 0 ? (
+                    <div className="p-2.5 rounded-lg bg-amber-950/20 border border-amber-500/30 space-y-1 text-xs">
+                      <div className="flex items-center justify-between text-amber-300 font-semibold">
+                        <span className="flex items-center gap-1"><Tag className="w-3.5 h-3.5" /> Special Discount Applied</span>
+                        <span>-{formatCurrency(booking.discount_amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-[#a1a1aa]">
+                        <span>
+                          Type: {booking.discount_type === 'PERCENTAGE' ? `${booking.discount_value}% Off` : `Flat ₹${booking.discount_value}`}
+                        </span>
+                        <span className="capitalize">{booking.discount_reason?.replace(/_/g, ' ').toLowerCase()}</span>
+                      </div>
+                    </div>
+                  ) : null}
 
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-[#a1a1aa]">Total Paid So Far:</span>
-                  <span className="font-semibold font-mono-numeric text-emerald-400">
-                    {formatCurrency(booking.total_paid || 0)}
-                  </span>
-                </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#a1a1aa]">Total Booking Fee:</span>
+                    <span className="font-bold font-mono-numeric text-base text-[#f4f4f5]">
+                      {formatCurrency(booking.total_amount)}
+                    </span>
+                  </div>
 
-                <div className="flex items-center justify-between text-xs pt-2 border-t border-[#27272a]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-[#f4f4f5]">Pending Balance Due:</span>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[#a1a1aa]">Total Paid So Far:</span>
+                    <span className="font-semibold font-mono-numeric text-emerald-400">
+                      {formatCurrency(booking.total_paid || 0)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-[#27272a]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-[#f4f4f5]">Pending Balance Due:</span>
+                      {!isEditingDue && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewDueAmount(pendingAmount);
+                            setAdjustmentReason(booking.pending_adjustment_reason || '');
+                            setIsEditingDue(true);
+                          }}
+                          className="p-1 rounded text-[#a1a1aa] hover:text-amber-400 hover:bg-[#27272a] transition-colors"
+                          title="Edit Due Amount"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
                     {!isEditingDue && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewDueAmount(pendingAmount);
-                          setAdjustmentReason(booking.pending_adjustment_reason || '');
-                          setIsEditingDue(true);
-                        }}
-                        className="p-1 rounded text-[#a1a1aa] hover:text-amber-400 hover:bg-[#27272a] transition-colors"
-                        title="Edit Due Amount"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
+                      <span className={`font-bold font-mono-numeric text-base ${
+                        pendingAmount > 0 ? 'text-amber-400' : 'text-emerald-400'
+                      }`}>
+                        {formatCurrency(pendingAmount)}
+                      </span>
                     )}
                   </div>
 
-                  {!isEditingDue && (
-                    <span className={`font-bold font-mono-numeric text-base ${
-                      pendingAmount > 0 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {formatCurrency(pendingAmount)}
-                    </span>
+                  {/* In-place Due Editing Form */}
+                  {isEditingDue && (
+                    <div className="p-2.5 rounded-lg bg-[#09090b] border border-amber-500/40 space-y-2 mt-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-amber-400">Edit Due Balance</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingDue(false)}
+                          className="text-[10px] text-[#a1a1aa] hover:text-[#f4f4f5]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={newDueAmount}
+                          onChange={(e) => setNewDueAmount(Number(e.target.value))}
+                          className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-sm font-mono text-amber-400 focus:outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleSaveDueAdjustment}
+                          className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1 shrink-0"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Save</span>
+                        </button>
+                      </div>
+
+                      <input
+                        type="text"
+                        placeholder="Adjustment reason (required if non-standard)..."
+                        value={adjustmentReason}
+                        onChange={(e) => setAdjustmentReason(e.target.value)}
+                        className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-[11px] text-[#f4f4f5] focus:outline-hidden"
+                      />
+                    </div>
+                  )}
+
+                  {booking.pending_adjustment_reason && !isEditingDue && (
+                    <div className="text-[11px] text-amber-300/90 pt-1">
+                      <span className="font-semibold">Reason:</span> {booking.pending_adjustment_reason}
+                    </div>
+                  )}
+
+                  {/* Payment Records */}
+                  {booking.payments && booking.payments.length > 0 && (
+                    <div className="pt-2.5 border-t border-[#27272a] space-y-2">
+                      <span className="text-[10px] text-[#71717a] uppercase font-bold tracking-wider block">
+                        Payment Records:
+                      </span>
+                      {booking.payments.map((p) => (
+                        <div key={p.id} className="p-2 bg-[#121214] border border-[#27272a] rounded-lg text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-1.5 font-semibold text-[#f4f4f5]">
+                              {p.payment_method === 'UPI' && <QrCode className="w-3.5 h-3.5 text-emerald-400" />}
+                              {p.payment_method === 'CASH' && <Banknote className="w-3.5 h-3.5 text-emerald-400" />}
+                              {p.payment_method === 'CARD' && <CreditCard className="w-3.5 h-3.5 text-emerald-400" />}
+                              <span>{p.payment_method}</span>
+                              {p.transaction_reference && (
+                                <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] font-mono text-emerald-300 border border-zinc-700">
+                                  {p.transaction_reference}
+                                </span>
+                              )}
+                            </div>
+                            <span className="font-mono-numeric font-bold text-emerald-400">
+                              +₹{p.amount.toLocaleString('en-IN')}
+                            </span>
+                          </div>
+
+                          {(p.payment_notes || p.notes) && (
+                            <div className="text-[11px] text-[#a1a1aa]">
+                              {p.payment_notes || p.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                {/* In-place Due Editing Form */}
-                {isEditingDue && (
-                  <div className="p-2.5 rounded-lg bg-[#09090b] border border-amber-500/40 space-y-2 mt-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-amber-400">Edit Due Balance</span>
-                      <button
-                        type="button"
-                        onClick={() => setIsEditingDue(false)}
-                        className="text-[10px] text-[#a1a1aa] hover:text-[#f4f4f5]"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        value={newDueAmount}
-                        onChange={(e) => setNewDueAmount(Number(e.target.value))}
-                        className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-sm font-mono text-amber-400 focus:outline-hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSaveDueAdjustment}
-                        className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1 shrink-0"
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Save</span>
-                      </button>
-                    </div>
-
-                    <input
-                      type="text"
-                      placeholder="Adjustment reason (required if non-standard)..."
-                      value={adjustmentReason}
-                      onChange={(e) => setAdjustmentReason(e.target.value)}
-                      className="w-full bg-[#18181b] border border-[#27272a] rounded px-2.5 py-1 text-[11px] text-[#f4f4f5] focus:outline-hidden"
-                    />
-                  </div>
-                )}
-
-                {booking.pending_adjustment_reason && !isEditingDue && (
-                  <div className="text-[11px] text-amber-300/90 pt-1">
-                    <span className="font-semibold">Reason:</span> {booking.pending_adjustment_reason}
-                  </div>
-                )}
-
-                {/* Feature 2: Payment History with Reference Badges */}
-                {booking.payments && booking.payments.length > 0 && (
-                  <div className="pt-2.5 border-t border-[#27272a] space-y-2">
-                    <span className="text-[10px] text-[#71717a] uppercase font-bold tracking-wider block">
-                      Payment Records:
-                    </span>
-                    {booking.payments.map((p) => (
-                      <div key={p.id} className="p-2 bg-[#121214] border border-[#27272a] rounded-lg text-xs space-y-1">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 font-semibold text-[#f4f4f5]">
-                            {p.payment_method === 'UPI' && <QrCode className="w-3.5 h-3.5 text-emerald-400" />}
-                            {p.payment_method === 'CASH' && <Banknote className="w-3.5 h-3.5 text-emerald-400" />}
-                            {p.payment_method === 'CARD' && <CreditCard className="w-3.5 h-3.5 text-emerald-400" />}
-                            <span>{p.payment_method}</span>
-                            {p.transaction_reference && (
-                              <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-[10px] font-mono text-emerald-300 border border-zinc-700">
-                                {p.transaction_reference}
-                              </span>
-                            )}
-                          </div>
-                          <span className="font-mono-numeric font-bold text-emerald-400">
-                            +₹{p.amount.toLocaleString('en-IN')}
-                          </span>
-                        </div>
-
-                        {(p.payment_notes || p.notes) && (
-                          <div className="text-[11px] text-[#a1a1aa]">
-                            {p.payment_notes || p.notes}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </>
           ) : (
             /* Feature 1: Immutable Activity Timeline */
@@ -448,14 +544,14 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               ) : (
                 <div className="relative pl-5 space-y-4 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#27272a]">
                   {auditLogs.map((log) => {
-                    const logDate = format(parseISO(log.created_at), 'dd MMM, hh:mm a');
+                    const logDate = log.created_at ? format(parseISO(log.created_at), 'dd MMM, hh:mm a') : 'Recent';
                     return (
                       <div key={log.id} className="relative group">
-                        <div className="absolute -left-5 top-1 p-1 rounded-full bg-[#18181b] border border-[#3f3f46]">
+                        <div className="absolute -left-5 top-1 p-1 rounded-full bg-[#18181b] border border-[#27272a]">
                           {renderAuditActionIcon(log.action_type)}
                         </div>
 
-                        <div className="p-3 bg-[#18181b] border border-[#27272a] rounded-xl space-y-1.5">
+                        <div className="p-3 rounded-xl bg-[#18181b] border border-[#27272a] space-y-1.5">
                           <div className="flex items-center justify-between">
                             <span className="font-bold text-xs text-[#f4f4f5]">
                               {formatActionTitle(log.action_type)}
@@ -490,52 +586,56 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 bg-[#18181b] border-t border-[#27272a] flex items-center justify-between gap-2.5 flex-wrap">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={isCancelling || booking.is_cancelled}
-              onClick={handleCancel}
-              className="p-2.5 rounded-lg bg-[#27272a] hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
-              title="Cancel Booking"
-            >
-              <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Cancel</span>
-            </button>
+        {!isMaskedBooking && (
+          <div className="p-4 bg-[#18181b] border-t border-[#27272a] flex items-center justify-between gap-2.5 flex-wrap">
+            {(isOwner || isOwnBrokerBooking) && (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={isCancelling || booking.is_cancelled}
+                  onClick={handleCancel}
+                  className="p-2.5 rounded-lg bg-[#27272a] hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title="Cancel Booking"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Cancel</span>
+                </button>
 
-            <button
-              type="button"
-              disabled={booking.is_cancelled}
-              onClick={() => setIsEditBookingModalOpen(true)}
-              className="p-2.5 rounded-lg bg-[#27272a] hover:bg-emerald-500/20 hover:text-emerald-300 text-[#f4f4f5] text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3f3f46] disabled:opacity-50"
-              title="Edit date, time, customer, fee, or notes"
-            >
-              <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Edit</span>
-            </button>
-          </div>
-
-          {!booking.is_cancelled && (
-            pendingAmount > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenCollectPayment(booking);
-                }}
-                className="flex-1 py-2.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-98 text-zinc-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md transition-all"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Collect ({formatCurrency(pendingAmount)})</span>
-              </button>
-            ) : (
-              <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold px-3 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Fully Settled</span>
+                <button
+                  type="button"
+                  disabled={booking.is_cancelled}
+                  onClick={() => setIsEditBookingModalOpen(true)}
+                  className="p-2.5 rounded-lg bg-[#27272a] hover:bg-emerald-500/20 hover:text-emerald-300 text-[#f4f4f5] text-xs font-semibold flex items-center gap-1.5 transition-colors border border-[#3f3f46] disabled:opacity-50"
+                  title="Edit date, time, customer, fee, or notes"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Edit</span>
+                </button>
               </div>
-            )
-          )}
-        </div>
+            )}
+
+            {isOwner && !booking.is_cancelled && (
+              pendingAmount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenCollectPayment(booking);
+                  }}
+                  className="flex-1 py-2.5 px-3 rounded-lg bg-amber-500 hover:bg-amber-400 active:scale-98 text-zinc-950 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md transition-all"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>Collect ({formatCurrency(pendingAmount)})</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold px-3 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>Fully Settled</span>
+                </div>
+              )
+            )}
+          </div>
+        )}
       </div>
 
       {/* Edit Booking Modal */}

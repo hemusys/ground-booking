@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Booking, Facility, EditBookingFormData } from '../types';
+import { Booking, Facility, EditBookingFormData, Broker, BookingSource, DiscountType } from '../types';
 import { formatCurrency, formatDateDisplay } from '../lib/utils';
 import { formatDurationLabel, createSafeBookingInterval } from '../lib/time';
-import { checkBookingConflict, updateBooking } from '../lib/api';
+import { checkBookingConflict, updateBooking, fetchBrokers } from '../lib/api';
 import { TimeSlotSelect } from './ui/TimeSlotSelect';
 import { ConflictModal } from './ui/ConflictModal';
 import { quickBookingSchema } from '../lib/schemas';
@@ -16,6 +16,9 @@ import {
   Check,
   Calendar as CalendarIcon,
   RefreshCw,
+  Swords,
+  Briefcase,
+  Tag
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
@@ -44,10 +47,23 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
   const [startTime, setStartTime] = useState<string>(format(bStart, 'HH:mm'));
   const [endTime, setEndTime] = useState<string>(format(bEnd, 'HH:mm'));
 
-  // Customer State
-  const [name, setName] = useState<string>(booking.customer?.name || '');
-  const [phone, setPhone] = useState<string>(booking.customer?.phone || '');
-  const [teamName, setTeamName] = useState<string>(booking.customer?.team_name || '');
+  // Team vs Team & Contact
+  const [teamAName, setTeamAName] = useState<string>(
+    booking.team_a_name || booking.customer?.team_name || booking.customer?.name || ''
+  );
+  const [teamBName, setTeamBName] = useState<string>(booking.team_b_name || '');
+  const [name, setName] = useState<string>(booking.contact_person || booking.customer?.name || '');
+  const [phone, setPhone] = useState<string>(booking.customer_phone || booking.customer?.phone || '');
+
+  // Source & Broker Attribution
+  const [brokers, setBrokers] = useState<Broker[]>([]);
+  const [bookingSource, setBookingSource] = useState<BookingSource>(booking.booking_source || 'DIRECT');
+  const [brokerId, setBrokerId] = useState<string | null>(booking.broker_id || null);
+
+  // Special Discounts
+  const [discountType, setDiscountType] = useState<DiscountType>(booking.discount_type || 'NONE');
+  const [discountValue, setDiscountValue] = useState<number>(booking.discount_value || 0);
+  const [discountReason, setDiscountReason] = useState<string>(booking.discount_reason || 'REGULAR_CUSTOMER');
 
   // Financials
   const [totalAmount, setTotalAmount] = useState<number>(booking.total_amount);
@@ -66,12 +82,16 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
   const [editSeriesMode, setEditSeriesMode] = useState<'THIS_ONLY' | 'FUTURE_SERIES'>('THIS_ONLY');
 
   // Conflict & Validation States
-  const { showToast } = useUIStore();
+  const { showToast, currentRole } = useUIStore();
   const [conflictingBooking, setConflictingBooking] = useState<Booking | null>(null);
   const [isConflictModalOpen, setIsConflictModalOpen] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchBrokers().then(setBrokers).catch(console.error);
+  }, []);
 
   // Time & Duration Calculation
   const [sh, sm] = startTime.split(':').map(Number);
@@ -86,10 +106,26 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
   const isDueOverridden = customPendingAmount !== naturalCalculatedDue;
 
   const selectedFacility = facilities.find((f) => f.id === facilityId);
+  const facilityHourlyRate = selectedFacility?.hourly_rate || 0;
+
+  const baseFee = (facilityHourlyRate > 0 && calculatedDurationMins > 0)
+    ? Math.round(facilityHourlyRate * (calculatedDurationMins / 60))
+    : totalAmount;
+
+  const discountAmount = discountType === 'PERCENTAGE'
+    ? Math.round(baseFee * (Math.max(0, Math.min(100, Number(discountValue) || 0)) / 100))
+    : discountType === 'FIXED'
+    ? Math.min(baseFee, Math.max(0, Number(discountValue) || 0))
+    : 0;
+
+  const netPayableFee = Math.max(0, baseFee - discountAmount);
 
   const handleSave = async (forceOverride: boolean = false) => {
     setValidationErrors({});
     const cleanPhone = phone.replace(/\D/g, '');
+
+    const assignedTeamA = teamAName.trim() || name.trim() || 'Team A';
+    const assignedTeamB = teamBName.trim() || null;
 
     const payload: EditBookingFormData = {
       booking_id: booking.id,
@@ -99,7 +135,14 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
       end_time: endTime,
       customer_phone: cleanPhone,
       customer_name: name.trim(),
-      team_name: teamName.trim() || undefined,
+      team_name: assignedTeamA,
+      team_a_name: assignedTeamA,
+      team_b_name: assignedTeamB || undefined,
+      booking_source: bookingSource,
+      broker_id: bookingSource === 'BROKER' ? brokerId : null,
+      discount_type: discountType,
+      discount_value: Number(discountValue) || 0,
+      discount_reason: discountType !== 'NONE' ? discountReason : undefined,
       total_amount: Number(totalAmount),
       custom_pending_amount: isDueOverridden ? Number(customPendingAmount) : null,
       pending_adjustment_reason: isDueOverridden ? pendingAdjustmentReason.trim() : null,
@@ -331,32 +374,64 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
               )}
             </div>
 
-            {/* Section 3: Customer Details */}
-            <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-2.5">
-              <div>
-                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
-                  Customer Phone *
-                </label>
-                <input
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
-                />
-                {validationErrors.customer_phone && (
-                  <span className="text-[10px] text-rose-400 block mt-0.5">{validationErrors.customer_phone}</span>
+            {/* Section 3: Team Matchup & Customer Details */}
+            <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
+              <div className="text-xs font-semibold text-[#f4f4f5] flex items-center justify-between">
+                <span>🏏 Match & Contact Info</span>
+                {teamBName ? (
+                  <span className="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-bold">
+                    Team vs Team Match
+                  </span>
+                ) : (
+                  <span className="text-[10px] bg-[#27272a] text-[#a1a1aa] px-2 py-0.5 rounded-full">
+                    Single Team / Practice
+                  </span>
                 )}
               </div>
 
+              {/* Team A & Team B Matchup */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
-                    Customer Name *
+                    Team A (Host / Team 1) *
+                  </label>
+                  <input
+                    type="text"
+                    value={teamAName}
+                    onChange={(e) => setTeamAName(e.target.value)}
+                    placeholder="e.g. Royal Strikers"
+                    className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-semibold text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                  />
+                  {validationErrors.team_a_name && (
+                    <span className="text-[10px] text-rose-400 block mt-0.5">{validationErrors.team_a_name}</span>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                    Team B (Opponent - Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={teamBName}
+                    onChange={(e) => setTeamBName(e.target.value)}
+                    placeholder="e.g. Chennai Super Kings"
+                    className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              {/* Contact Person Details */}
+              <div className="grid grid-cols-2 gap-3 pt-1 border-t border-[#27272a]/60">
+                <div>
+                  <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                    Contact / Captain Name *
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    placeholder="Organizer name"
                     className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
                   />
                   {validationErrors.customer_name && (
@@ -366,19 +441,180 @@ export const EditBookingModal: React.FC<EditBookingModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
-                    Team Name (Optional)
+                    Customer Phone *
                   </label>
                   <input
-                    type="text"
-                    value={teamName}
-                    onChange={(e) => setTeamName(e.target.value)}
-                    className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="10-digit mobile"
+                    className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
                   />
+                  {validationErrors.customer_phone && (
+                    <span className="text-[10px] text-rose-400 block mt-0.5">{validationErrors.customer_phone}</span>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Section 4: Financial Summary & Editable Balance */}
+            {/* Section 4: Booking Source & Broker Attribution */}
+            <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-2.5">
+              <label className="block text-xs font-semibold text-[#a1a1aa]">
+                Booking Source
+              </label>
+              {currentRole === 'OWNER' ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['DIRECT', 'BROKER', 'ONLINE'] as BookingSource[]).map((src) => (
+                      <button
+                        key={src}
+                        type="button"
+                        onClick={() => {
+                          setBookingSource(src);
+                          if (src !== 'BROKER') setBrokerId(null);
+                        }}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border ${
+                          bookingSource === src
+                            ? 'bg-emerald-600 text-white border-emerald-400 font-bold'
+                            : 'bg-[#09090b] text-[#a1a1aa] border-[#27272a] hover:text-[#f4f4f5]'
+                        }`}
+                      >
+                        {src === 'DIRECT' ? 'Direct' : src === 'BROKER' ? 'Broker' : 'Online'}
+                      </button>
+                    ))}
+                  </div>
+
+                  {bookingSource === 'BROKER' && (
+                    <div className="pt-2">
+                      <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                        Select Broker *
+                      </label>
+                      <select
+                        value={brokerId || ''}
+                        onChange={(e) => setBrokerId(e.target.value || null)}
+                        className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                      >
+                        <option value="">-- Choose Broker --</option>
+                        {brokers.filter(b => b.is_active).map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-2.5 rounded-lg bg-[#09090b] border border-[#27272a] text-xs font-semibold text-[#f4f4f5] flex items-center justify-between">
+                  <span>Source: <strong className="text-emerald-400">Broker Booking</strong></span>
+                  <span className="text-[11px] text-[#71717a]">Attributed to you</span>
+                </div>
+              )}
+            </div>
+
+            {/* Section 5: Special Discounts */}
+            {currentRole === 'OWNER' && (
+              <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#f4f4f5] flex items-center gap-1.5">
+                    <span>🏷️</span> Special Discount
+                  </label>
+                  {discountType !== 'NONE' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiscountType('NONE');
+                        setDiscountValue(0);
+                        setTotalAmount(baseFee);
+                        setCustomPendingAmount(Math.max(0, baseFee - totalPaid));
+                      }}
+                      className="text-[10px] text-rose-400 hover:underline"
+                    >
+                      Remove Discount
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {(['NONE', 'PERCENTAGE', 'FIXED'] as DiscountType[]).map((type) => (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => {
+                        setDiscountType(type);
+                        if (type === 'NONE') {
+                          setDiscountValue(0);
+                          setTotalAmount(baseFee);
+                          setCustomPendingAmount(Math.max(0, baseFee - totalPaid));
+                        }
+                      }}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-semibold transition-all border ${
+                        discountType === type
+                          ? 'bg-amber-600 text-white border-amber-400 font-bold'
+                          : 'bg-[#09090b] text-[#a1a1aa] border-[#27272a] hover:text-[#f4f4f5]'
+                      }`}
+                    >
+                      {type === 'NONE' ? 'No Discount' : type === 'PERCENTAGE' ? '% Percentage' : '₹ Fixed Flat'}
+                    </button>
+                  ))}
+                </div>
+
+                {discountType !== 'NONE' && (
+                  <div className="space-y-2.5 pt-1">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-[#a1a1aa] mb-1">
+                          {discountType === 'PERCENTAGE' ? 'Discount Rate (%)' : 'Discount Amount (₹)'}
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max={discountType === 'PERCENTAGE' ? 100 : baseFee}
+                          value={discountValue || ''}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setDiscountValue(val);
+                            const disc = discountType === 'PERCENTAGE'
+                              ? Math.round(baseFee * (Math.max(0, Math.min(100, val)) / 100))
+                              : Math.min(baseFee, Math.max(0, val));
+                            const newTotal = Math.max(0, baseFee - disc);
+                            setTotalAmount(newTotal);
+                            setCustomPendingAmount(Math.max(0, newTotal - totalPaid));
+                          }}
+                          placeholder={discountType === 'PERCENTAGE' ? '10' : '200'}
+                          className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-mono text-amber-400 focus:outline-hidden focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-[#a1a1aa] mb-1">
+                          Discount Reason
+                        </label>
+                        <select
+                          value={discountReason}
+                          onChange={(e) => setDiscountReason(e.target.value)}
+                          className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-2.5 py-1.5 text-xs text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                        >
+                          <option value="REGULAR_CUSTOMER">Regular Customer</option>
+                          <option value="TOURNAMENT">Tournament</option>
+                          <option value="BROKER_OFFER">Broker Offer</option>
+                          <option value="OTHER">Other</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Discount Summary Pill */}
+                    <div className="p-2.5 bg-amber-950/30 border border-amber-500/30 rounded-lg flex items-center justify-between text-xs">
+                      <span className="text-[#a1a1aa]">Original Base: <del className="font-mono">{formatCurrency(baseFee)}</del></span>
+                      <span className="text-amber-400 font-semibold">Discount: -{formatCurrency(discountAmount)}</span>
+                      <span className="text-emerald-400 font-bold font-mono">Net: {formatCurrency(netPayableFee)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Section 6: Financial Summary & Editable Balance */}
             <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
               <div className="p-3 rounded-lg bg-[#09090b] border border-[#27272a] grid grid-cols-3 gap-2 text-center">
                 <div>

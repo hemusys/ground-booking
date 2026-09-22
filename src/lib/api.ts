@@ -18,7 +18,14 @@ import {
   RecurrenceConflictResult,
   RecurrenceConflictItem,
   DailyReconciliation,
-  ReconciliationReportMetrics
+  ReconciliationReportMetrics,
+  Broker,
+  BrokerStats,
+  BrokerOperationalReportItem,
+  UserRole,
+  BookingSource,
+  DiscountType,
+  DiscountReason
 } from '../types';
 import { 
   format, 
@@ -42,6 +49,13 @@ const STORAGE_KEY_PAYMENTS = 'gm_payments_v2';
 const STORAGE_KEY_AUDIT_LOGS = 'gm_audit_logs_v2';
 const STORAGE_KEY_RECURRING_GROUPS = 'gm_recurring_groups_v2';
 const STORAGE_KEY_RECONCILIATIONS = 'gm_reconciliations_v2';
+const STORAGE_KEY_BROKERS = 'gm_brokers_v2';
+
+export const DEFAULT_BROKERS: Broker[] = [
+  { id: 'br-1', name: 'Rajesh Sharma', phone: '9811223344', code: 'BRK-001', notes: 'Weekend match organizer', is_active: true, created_at: new Date().toISOString() },
+  { id: 'br-2', name: 'Sunil Verma', phone: '9822334455', code: 'BRK-002', notes: 'Corporate tournament coordinator', is_active: true, created_at: new Date().toISOString() },
+  { id: 'br-3', name: 'Deepak Patel', phone: '9833445566', code: 'BRK-003', notes: 'Under-19 club matches', is_active: true, created_at: new Date().toISOString() },
+];
 
 const DEFAULT_FACILITIES: Facility[] = [
   { id: 'f-1', name: 'Main Ground', type: 'GROUND', hourly_rate: 1500, display_order: 1, is_active: true },
@@ -79,6 +93,16 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(6, 0),
       end_time: getTodayIso(10, 0),
+      team_a_name: 'Strikers CC',
+      team_b_name: 'Super Kings',
+      contact_person: 'Rahul Verma',
+      customer_phone: '9876543210',
+      booking_source: 'BROKER',
+      broker_id: 'br-1',
+      base_amount: 6000,
+      discount_type: 'NONE',
+      discount_value: 0,
+      discount_amount: 0,
       total_amount: 6000,
       custom_pending_amount: null,
       pending_adjustment_reason: null,
@@ -93,9 +117,20 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(16, 0),
       end_time: getTodayIso(20, 0),
-      total_amount: 6000,
-      custom_pending_amount: 4000,
-      pending_adjustment_reason: 'Standard calculated balance',
+      team_a_name: 'Super Kings',
+      team_b_name: 'Mumbai Smashers',
+      contact_person: 'Vikram Singh',
+      customer_phone: '9845123456',
+      booking_source: 'BROKER',
+      broker_id: 'br-2',
+      base_amount: 6000,
+      discount_type: 'PERCENTAGE',
+      discount_value: 10,
+      discount_reason: 'BROKER_OFFER',
+      discount_amount: 600,
+      total_amount: 5400,
+      custom_pending_amount: 3400,
+      pending_adjustment_reason: 'Discounted rate applied',
       notes: 'Evening floodlight match',
       is_cancelled: false,
       created_at: new Date().toISOString(),
@@ -107,6 +142,16 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(6, 30),
       end_time: getTodayIso(8, 0),
+      team_a_name: 'Mumbai Smashers',
+      team_b_name: null,
+      contact_person: 'Rohit Sharma',
+      customer_phone: '9711223344',
+      booking_source: 'DIRECT',
+      broker_id: null,
+      base_amount: 750,
+      discount_type: 'NONE',
+      discount_value: 0,
+      discount_amount: 0,
       total_amount: 750,
       custom_pending_amount: 0,
       pending_adjustment_reason: null,
@@ -121,8 +166,19 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(18, 0),
       end_time: getTodayIso(19, 30),
-      total_amount: 750,
-      custom_pending_amount: 450,
+      team_a_name: 'Apex Academy',
+      team_b_name: null,
+      contact_person: 'Amit Patel',
+      customer_phone: '9822334455',
+      booking_source: 'BROKER',
+      broker_id: 'br-1',
+      base_amount: 750,
+      discount_type: 'FIXED',
+      discount_value: 100,
+      discount_reason: 'REGULAR_CUSTOMER',
+      discount_amount: 100,
+      total_amount: 650,
+      custom_pending_amount: 350,
       pending_adjustment_reason: null,
       notes: 'Bowling drills',
       is_cancelled: false,
@@ -135,6 +191,16 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(7, 0),
       end_time: getTodayIso(9, 0),
+      team_a_name: 'Tamil Titans',
+      team_b_name: null,
+      contact_person: 'Dinesh Karthik',
+      customer_phone: '9988776655',
+      booking_source: 'DIRECT',
+      broker_id: null,
+      base_amount: 1400,
+      discount_type: 'NONE',
+      discount_value: 0,
+      discount_amount: 0,
       total_amount: 1400,
       custom_pending_amount: 0,
       pending_adjustment_reason: null,
@@ -149,6 +215,16 @@ function getInitialBookings(): Booking[] {
       booking_date: TODAY_DATE_STR,
       start_time: getTodayIso(18, 0),
       end_time: getTodayIso(19, 30),
+      team_a_name: 'Super Kings',
+      team_b_name: null,
+      contact_person: 'Vikram Singh',
+      customer_phone: '9845123456',
+      booking_source: 'BROKER',
+      broker_id: 'br-3',
+      base_amount: 1200,
+      discount_type: 'NONE',
+      discount_value: 0,
+      discount_amount: 0,
       total_amount: 1200,
       custom_pending_amount: 1200,
       pending_adjustment_reason: 'Zero advance paid',
@@ -232,6 +308,9 @@ export function initializeStorage(reset: boolean = false, seedDemoData: boolean 
   if (!loadLocal(STORAGE_KEY_CUSTOMERS, null)) {
     saveLocal(STORAGE_KEY_CUSTOMERS, DEFAULT_CUSTOMERS);
   }
+  if (!loadLocal(STORAGE_KEY_BROKERS, null)) {
+    saveLocal(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
+  }
 
   if (seedDemoData) {
     if (!loadLocal(STORAGE_KEY_BOOKINGS, null)) {
@@ -255,6 +334,7 @@ export function initializeStorage(reset: boolean = false, seedDemoData: boolean 
     saveLocal(STORAGE_KEY_AUDIT_LOGS, []);
     saveLocal(STORAGE_KEY_RECURRING_GROUPS, []);
     saveLocal(STORAGE_KEY_RECONCILIATIONS, []);
+    saveLocal(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
   }
 }
 
@@ -646,10 +726,12 @@ export async function fetchBookings(dateFilter?: string): Promise<Booking[]> {
   const payments = loadLocal<Payment[]>(STORAGE_KEY_PAYMENTS, getInitialPayments());
   const auditLogs = loadLocal<BookingAuditLog[]>(STORAGE_KEY_AUDIT_LOGS, getInitialAuditLogs());
   const recurringGroups = loadLocal<RecurringBookingGroup[]>(STORAGE_KEY_RECURRING_GROUPS, []);
+  const brokers = loadLocal<Broker[]>(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
 
   const facilityMap = new Map(facilities.map(f => [f.id, f]));
   const customerMap = new Map(customers.map(c => [c.id, c]));
   const groupMap = new Map(recurringGroups.map(g => [g.id, g]));
+  const brokerMap = new Map(brokers.map(br => [br.id, br]));
 
   return bookings
     .filter(b => !b.is_cancelled)
@@ -667,6 +749,7 @@ export async function fetchBookings(dateFilter?: string): Promise<Booking[]> {
         booking_date: b.booking_date || format(parseISO(b.start_time), 'yyyy-MM-dd'),
         facility: facilityMap.get(b.facility_id),
         customer: customerMap.get(b.customer_id),
+        broker: b.broker_id ? brokerMap.get(b.broker_id) : undefined,
         payments: bPayments,
         audit_logs: bLogs,
         recurring_group: b.recurring_group_id ? groupMap.get(b.recurring_group_id) : undefined,
@@ -783,6 +866,26 @@ export async function createQuickBooking(formData: QuickBookFormData): Promise<B
   const adjustmentReason = formData.pending_adjustment_reason || null;
   const bookingDate = formData.date;
 
+  const teamAName = formData.team_a_name || formData.team_name || formData.customer_name;
+  const teamBName = formData.team_b_name || null;
+  const contactPerson = formData.customer_name;
+  const customerPhone = formData.customer_phone;
+  const bookingSource: BookingSource = formData.booking_source || (formData.broker_id ? 'BROKER' : 'DIRECT');
+  const brokerId = formData.broker_id || null;
+  const discountType: DiscountType = formData.discount_type || 'NONE';
+  const discountValue = Number(formData.discount_value) || 0;
+  const discountReason = formData.discount_reason || null;
+
+  let baseAmount = Number(formData.total_amount);
+  let discountAmount = 0;
+  if (discountType === 'PERCENTAGE' && discountValue > 0) {
+    baseAmount = Math.round(Number(formData.total_amount) / (1 - discountValue / 100));
+    discountAmount = baseAmount - Number(formData.total_amount);
+  } else if (discountType === 'FIXED' && discountValue > 0) {
+    discountAmount = discountValue;
+    baseAmount = Number(formData.total_amount) + discountAmount;
+  }
+
   if (isSupabaseConfigured && supabase) {
     const { data: booking, error } = await supabase
       .from('bookings')
@@ -871,6 +974,17 @@ export async function createQuickBooking(formData: QuickBookFormData): Promise<B
     booking_date: bookingDate,
     start_time: startIso,
     end_time: endIso,
+    team_a_name: teamAName,
+    team_b_name: teamBName,
+    contact_person: contactPerson,
+    customer_phone: customerPhone,
+    booking_source: bookingSource,
+    broker_id: brokerId,
+    base_amount: baseAmount,
+    discount_type: discountType,
+    discount_value: discountValue,
+    discount_reason: discountReason,
+    discount_amount: discountAmount,
     total_amount: Number(formData.total_amount),
     custom_pending_amount: customPending,
     pending_adjustment_reason: adjustmentReason,
@@ -1052,6 +1166,17 @@ export async function createRecurringBookings(
         booking_date: dStr,
         start_time: startIso,
         end_time: endIso,
+        team_a_name: formData.team_a_name || formData.team_name || formData.customer_name,
+        team_b_name: formData.team_b_name || null,
+        contact_person: formData.customer_name,
+        customer_phone: formData.customer_phone,
+        booking_source: formData.booking_source || (formData.broker_id ? 'BROKER' : 'DIRECT'),
+        broker_id: formData.broker_id || null,
+        base_amount: Number(formData.total_amount),
+        discount_type: formData.discount_type || 'NONE',
+        discount_value: Number(formData.discount_value) || 0,
+        discount_reason: formData.discount_reason || null,
+        discount_amount: 0,
         total_amount: Number(formData.total_amount),
         custom_pending_amount: customPending,
         pending_adjustment_reason: formData.pending_adjustment_reason || null,
@@ -1122,6 +1247,26 @@ export async function updateBooking(formData: EditBookingFormData): Promise<Book
   const isRescheduled = prevBooking && (prevBooking.start_time !== startIso || prevBooking.end_time !== endIso);
   const actionType: AuditLogAction = isRescheduled ? 'BOOKING_RESCHEDULED' : 'BOOKING_EDITED';
 
+  const teamAName = formData.team_a_name || formData.team_name || formData.customer_name;
+  const teamBName = formData.team_b_name !== undefined ? (formData.team_b_name || null) : (prevBooking?.team_b_name || null);
+  const contactPerson = formData.customer_name;
+  const customerPhone = formData.customer_phone;
+  const bookingSource = formData.booking_source || prevBooking?.booking_source || (formData.broker_id ? 'BROKER' : 'DIRECT');
+  const brokerId = formData.broker_id !== undefined ? (formData.broker_id || null) : (prevBooking?.broker_id || null);
+  const discountType = formData.discount_type || prevBooking?.discount_type || 'NONE';
+  const discountValue = formData.discount_value !== undefined ? Number(formData.discount_value) : (prevBooking?.discount_value || 0);
+  const discountReason = formData.discount_reason !== undefined ? formData.discount_reason : (prevBooking?.discount_reason || null);
+
+  let baseAmount = Number(formData.total_amount);
+  let discountAmount = 0;
+  if (discountType === 'PERCENTAGE' && discountValue > 0) {
+    baseAmount = Math.round(Number(formData.total_amount) / (1 - discountValue / 100));
+    discountAmount = baseAmount - Number(formData.total_amount);
+  } else if (discountType === 'FIXED' && discountValue > 0) {
+    discountAmount = discountValue;
+    baseAmount = Number(formData.total_amount) + discountAmount;
+  }
+
   // If editing future series
   if (formData.edit_series_mode === 'FUTURE_SERIES' && prevBooking?.recurring_group_id) {
     const groupBookings = allCurrent.filter(b => 
@@ -1153,6 +1298,17 @@ export async function updateBooking(formData: EditBookingFormData): Promise<Book
             customer_id: customer.id,
             start_time: fStart,
             end_time: fEnd,
+            team_a_name: teamAName,
+            team_b_name: teamBName,
+            contact_person: contactPerson,
+            customer_phone: customerPhone,
+            booking_source: bookingSource,
+            broker_id: brokerId,
+            base_amount: baseAmount,
+            discount_type: discountType,
+            discount_value: discountValue,
+            discount_reason: discountReason,
+            discount_amount: discountAmount,
             total_amount: Number(formData.total_amount),
             notes: formData.notes || bookings[bIdx].notes,
             updated_at: updatedAt,
@@ -1231,6 +1387,17 @@ export async function updateBooking(formData: EditBookingFormData): Promise<Book
     booking_date: bookingDate,
     start_time: startIso,
     end_time: endIso,
+    team_a_name: teamAName,
+    team_b_name: teamBName,
+    contact_person: contactPerson,
+    customer_phone: customerPhone,
+    booking_source: bookingSource,
+    broker_id: brokerId,
+    base_amount: baseAmount,
+    discount_type: discountType,
+    discount_value: discountValue,
+    discount_reason: discountReason,
+    discount_amount: discountAmount,
     total_amount: Number(formData.total_amount),
     custom_pending_amount: customPending,
     pending_adjustment_reason: adjustmentReason,
@@ -1737,4 +1904,218 @@ export function computeReconciliationMetrics(records: DailyReconciliation[]): Re
     totalExpected,
     totalActual,
   };
+}
+
+// --- BROKER MANAGEMENT & REPORTING ---
+
+export async function fetchBrokers(): Promise<Broker[]> {
+  initializeStorage();
+  return loadLocal<Broker[]>(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
+}
+
+export async function saveBroker(brokerData: Partial<Broker> & { name: string; phone: string }): Promise<Broker> {
+  initializeStorage();
+  const brokers = loadLocal<Broker[]>(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
+
+  if (brokerData.id) {
+    const idx = brokers.findIndex(b => b.id === brokerData.id);
+    if (idx !== -1) {
+      brokers[idx] = {
+        ...brokers[idx],
+        name: brokerData.name.trim(),
+        phone: brokerData.phone.trim(),
+        notes: brokerData.notes !== undefined ? (brokerData.notes?.trim() || null) : brokers[idx].notes,
+        is_active: brokerData.is_active !== undefined ? brokerData.is_active : brokers[idx].is_active,
+      };
+      saveLocal(STORAGE_KEY_BROKERS, brokers);
+      return brokers[idx];
+    }
+  }
+
+  // Generate sequence code BRK-001, BRK-002, etc.
+  const existingNums = brokers
+    .map(b => {
+      const match = b.code?.match(/BRK-(\d+)/i);
+      return match ? parseInt(match[1], 10) : 0;
+    })
+    .filter(n => !isNaN(n) && n > 0);
+  const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : brokers.length + 1;
+  const autoCode = `BRK-${String(nextNum).padStart(3, '0')}`;
+
+  const newBroker: Broker = {
+    id: `br-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    name: brokerData.name.trim(),
+    phone: brokerData.phone.trim(),
+    code: brokerData.code || autoCode,
+    notes: brokerData.notes?.trim() || null,
+    is_active: true,
+    created_at: new Date().toISOString(),
+  };
+
+  brokers.push(newBroker);
+  saveLocal(STORAGE_KEY_BROKERS, brokers);
+  return newBroker;
+}
+
+export async function toggleBrokerStatus(brokerId: string): Promise<Broker> {
+  initializeStorage();
+  const brokers = loadLocal<Broker[]>(STORAGE_KEY_BROKERS, DEFAULT_BROKERS);
+  const idx = brokers.findIndex(b => b.id === brokerId);
+  if (idx === -1) throw new Error('Broker not found');
+
+  brokers[idx] = {
+    ...brokers[idx],
+    is_active: !brokers[idx].is_active,
+  };
+  saveLocal(STORAGE_KEY_BROKERS, brokers);
+  return brokers[idx];
+}
+
+export async function fetchBrokerStats(brokerId: string): Promise<BrokerStats> {
+  const brokers = await fetchBrokers();
+  const broker = brokers.find(b => b.id === brokerId);
+  if (!broker) {
+    return {
+      broker_id: brokerId,
+      broker_name: 'Broker',
+      code: 'BRK-000',
+      is_active: true,
+      total_bookings: 0,
+      total_hours: 0,
+      today_bookings: 0,
+      this_month_bookings: 0,
+      upcoming_bookings: 0,
+    };
+  }
+
+  const allBookings = await fetchBookings();
+  const brokerBookings = allBookings.filter(b => b.broker_id === brokerId && !b.is_cancelled);
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const now = new Date();
+  const currentMonthStr = format(now, 'yyyy-MM');
+
+  let total_hours = 0;
+  let today_bookings = 0;
+  let this_month_bookings = 0;
+  let upcoming_bookings = 0;
+
+  for (const b of brokerBookings) {
+    const start = new Date(b.start_time);
+    const end = new Date(b.end_time);
+    const durationHours = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+    total_hours += durationHours;
+
+    if (b.booking_date === todayStr) {
+      today_bookings++;
+    }
+    if (b.booking_date && b.booking_date.startsWith(currentMonthStr)) {
+      this_month_bookings++;
+    }
+    if (start.getTime() > now.getTime()) {
+      upcoming_bookings++;
+    }
+  }
+
+  return {
+    broker_id: broker.id,
+    broker_name: broker.name,
+    code: broker.code,
+    broker_code: broker.code,
+    is_active: broker.is_active,
+    total_bookings: brokerBookings.length,
+    total_hours: Math.round(total_hours * 10) / 10,
+    total_hours_booked: Math.round(total_hours * 10) / 10,
+    today_bookings,
+    this_month_bookings,
+    upcoming_bookings,
+  };
+}
+
+export async function fetchBrokerOperationalReport(): Promise<BrokerOperationalReportItem[]> {
+  const brokers = await fetchBrokers();
+  const allBookings = await fetchBookings();
+  const now = new Date();
+  const currentMonthStr = format(now, 'yyyy-MM');
+
+  return brokers.map(br => {
+    const brBookings = allBookings.filter(b => b.broker_id === br.id && !b.is_cancelled);
+    let total_hours = 0;
+    let this_month_bookings = 0;
+
+    for (const b of brBookings) {
+      const start = new Date(b.start_time);
+      const end = new Date(b.end_time);
+      const durationHours = Math.max(0, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+      total_hours += durationHours;
+
+      if (b.booking_date && b.booking_date.startsWith(currentMonthStr)) {
+        this_month_bookings++;
+      }
+    }
+
+    return {
+      broker_id: br.id,
+      broker_name: br.name,
+      code: br.code,
+      broker_code: br.code,
+      phone: br.phone,
+      total_bookings: brBookings.length,
+      total_hours: Math.round(total_hours * 10) / 10,
+      total_hours_booked: Math.round(total_hours * 10) / 10,
+      this_month_bookings,
+      status: br.is_active ? 'ACTIVE' : 'DISABLED',
+    };
+  });
+}
+
+/**
+ * PRIVACY MASKING UTILITY
+ * In Broker role, other brokers' bookings and direct bookings are masked to "BOOKED"
+ * with customer details, phone numbers, and financial data stripped out.
+ */
+export function getMaskedBookingsForRole(
+  bookings: Booking[],
+  role: UserRole,
+  activeBrokerId: string | null
+): Booking[] {
+  if (role === 'OWNER') {
+    return bookings.map(b => ({
+      ...b,
+      is_masked: false,
+    }));
+  }
+
+  return bookings.map(b => {
+    // If booked by this active broker, return full details
+    if (b.broker_id && activeBrokerId && b.broker_id === activeBrokerId) {
+      return {
+        ...b,
+        is_masked: false,
+      };
+    }
+
+    // Otherwise mask into privacy-safe booked slot
+    return {
+      ...b,
+      is_masked: true,
+      team_a_name: 'BOOKED',
+      team_b_name: null,
+      contact_person: undefined,
+      customer_phone: undefined,
+      notes: null,
+      customer: undefined,
+      payments: [],
+      audit_logs: [],
+      base_amount: 0,
+      total_amount: 0,
+      total_paid: 0,
+      pending_amount: 0,
+      custom_pending_amount: null,
+      discount_type: 'NONE',
+      discount_value: 0,
+      discount_amount: 0,
+      discount_reason: null,
+    };
+  });
 }

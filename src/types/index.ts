@@ -68,6 +68,54 @@ export interface RecurringBookingGroup {
   created_at: string;
 }
 
+// Role System
+export type UserRole = 'OWNER' | 'BROKER';
+
+// Booking Source
+export type BookingSource = 'DIRECT' | 'BROKER' | 'ONLINE';
+
+// Special Discount System
+export type DiscountType = 'NONE' | 'PERCENTAGE' | 'FIXED';
+export type DiscountReason = 'REGULAR_CUSTOMER' | 'TOURNAMENT' | 'BROKER_OFFER' | 'OTHER';
+
+// Broker Entity
+export interface Broker {
+  id: string;             // e.g. "br-1"
+  name: string;           // e.g. "Rajesh Sharma"
+  phone: string;          // e.g. "9811223344"
+  code: string;           // Auto-generated e.g. "BRK-001", "BRK-002"
+  notes?: string | null;  // e.g. "Weekend match organizer"
+  is_active: boolean;     // true | false
+  created_at: string;
+}
+
+export interface BrokerStats {
+  broker_id: string;
+  broker_name: string;
+  code: string;
+  broker_code?: string;
+  is_active: boolean;
+  total_bookings: number;
+  total_hours: number;
+  total_hours_booked?: number;
+  today_bookings: number;
+  this_month_bookings: number;
+  upcoming_bookings: number;
+}
+
+export interface BrokerOperationalReportItem {
+  broker_id: string;
+  broker_name: string;
+  code: string;
+  broker_code?: string;
+  phone: string;
+  total_bookings: number;
+  total_hours: number;
+  total_hours_booked?: number;
+  this_month_bookings: number;
+  status: 'ACTIVE' | 'DISABLED';
+}
+
 export interface Booking {
   id: string;
   booking_number?: number;
@@ -76,6 +124,25 @@ export interface Booking {
   booking_date: string; // YYYY-MM-DD (Timezone hardened local date)
   start_time: string;   // ISO 8601 string
   end_time: string;     // ISO 8601 string
+  
+  // Team vs Team & Contact Details
+  team_a_name?: string;
+  team_b_name?: string | null;
+  contact_person?: string;
+  customer_phone?: string;
+  
+  // Booking Source & Broker Attribution
+  booking_source?: BookingSource;
+  broker_id?: string | null;
+  broker?: Broker;
+  
+  // Special Discount
+  base_amount?: number;
+  discount_type?: DiscountType;
+  discount_value?: number;
+  discount_reason?: string | null;
+  discount_amount?: number;
+
   total_amount: number;
   custom_pending_amount?: number | null;
   pending_adjustment_reason?: string | null;
@@ -96,6 +163,7 @@ export interface Booking {
   total_paid?: number;
   pending_amount?: number;
   payment_status?: PaymentStatus;
+  is_masked?: boolean; // When viewed by another broker
 }
 
 export interface QuickBookFormData {
@@ -103,9 +171,24 @@ export interface QuickBookFormData {
   date: string; // YYYY-MM-DD
   start_time: string; // HH:mm
   end_time: string;   // HH:mm
+  
+  // Team vs Team
+  team_a_name?: string;
+  team_b_name?: string;
   customer_phone: string;
-  customer_name: string;
-  team_name?: string;
+  customer_name: string; // Contact Person
+  team_name?: string;    // Backward compatibility alias
+
+  // Source & Broker
+  booking_source?: BookingSource;
+  broker_id?: string | null;
+
+  // Discounts
+  discount_type?: DiscountType;
+  discount_value?: number;
+  discount_amount?: number;
+  discount_reason?: string;
+
   total_amount: number;
   advance_paid: number;
   custom_pending_amount?: number | null;
@@ -132,9 +215,24 @@ export interface EditBookingFormData {
   date: string; // YYYY-MM-DD
   start_time: string; // HH:mm
   end_time: string;   // HH:mm
+
+  // Team vs Team
+  team_a_name?: string;
+  team_b_name?: string;
   customer_phone: string;
-  customer_name: string;
-  team_name?: string;
+  customer_name: string; // Contact Person
+  team_name?: string;    // Backward compatibility alias
+
+  // Source & Broker
+  booking_source?: BookingSource;
+  broker_id?: string | null;
+
+  // Discounts
+  discount_type?: DiscountType;
+  discount_value?: number;
+  discount_amount?: number;
+  discount_reason?: string;
+
   total_amount: number;
   custom_pending_amount?: number | null;
   pending_adjustment_reason?: string | null;

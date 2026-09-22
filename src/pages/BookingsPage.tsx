@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   ShieldAlert,
+  Users,
 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 
@@ -37,7 +38,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
   facilities,
   refetch,
 }) => {
-  const { openQuickBook } = useUIStore();
+  const { openQuickBook, currentRole, activeBrokerId } = useUIStore();
+  const isOwner = currentRole === 'OWNER';
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,6 +54,14 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
   const [selectedBookingForEdit, setSelectedBookingForEdit] = useState<Booking | null>(null);
   const [selectedBookingForPayment, setSelectedBookingForPayment] = useState<Booking | null>(null);
 
+  // Filtered Bookings for Role
+  const roleFilteredBookings = useMemo(() => {
+    if (currentRole === 'BROKER') {
+      return bookings.filter((b) => b.broker_id === activeBrokerId);
+    }
+    return bookings;
+  }, [bookings, currentRole, activeBrokerId]);
+
   // Filtered Bookings
   const filters: BookingSearchFilters = useMemo(() => ({
     searchQuery,
@@ -62,8 +72,8 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
   }), [searchQuery, statusFilter, facilityId, startDate, endDate]);
 
   const filteredBookings = useMemo(() => {
-    return filterBookings(bookings, filters);
-  }, [bookings, filters]);
+    return filterBookings(roleFilteredBookings, filters);
+  }, [roleFilteredBookings, filters]);
 
   // Aggregate Metrics for current filtered view
   const metrics = useMemo(() => {
@@ -262,36 +272,59 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
           </div>
         )}
 
-        {/* Aggregated Financial Metrics Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#27272a]">
-          <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
-            <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Matches / Bookings</span>
-            <span className="text-base font-bold font-mono text-[#f4f4f5]">
-              {metrics.count}
-            </span>
-          </div>
+        {/* Metrics Summary Bar */}
+        {isOwner ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-[#27272a]">
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Matches / Bookings</span>
+              <span className="text-base font-bold font-mono text-[#f4f4f5]">
+                {metrics.count}
+              </span>
+            </div>
 
-          <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
-            <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Total Amount</span>
-            <span className="text-base font-bold font-mono text-emerald-400">
-              {formatCurrency(metrics.totalRevenue)}
-            </span>
-          </div>
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Total Amount</span>
+              <span className="text-base font-bold font-mono text-emerald-400">
+                {formatCurrency(metrics.totalRevenue)}
+              </span>
+            </div>
 
-          <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
-            <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Collected</span>
-            <span className="text-base font-bold font-mono text-[#f4f4f5]">
-              {formatCurrency(metrics.totalCollected)}
-            </span>
-          </div>
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Collected</span>
+              <span className="text-base font-bold font-mono text-[#f4f4f5]">
+                {formatCurrency(metrics.totalCollected)}
+              </span>
+            </div>
 
-          <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
-            <span className="text-[10px] text-amber-400 uppercase font-bold block">Pending Due</span>
-            <span className="text-base font-bold font-mono text-amber-400">
-              {formatCurrency(metrics.totalPending)}
-            </span>
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-amber-400 uppercase font-bold block">Pending Due</span>
+              <span className="text-base font-bold font-mono text-amber-400">
+                {formatCurrency(metrics.totalPending)}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-[#27272a]">
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">My Total Bookings</span>
+              <span className="text-base font-bold font-mono text-emerald-400">
+                {metrics.count}
+              </span>
+            </div>
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Active Filter</span>
+              <span className="text-base font-bold font-mono text-[#f4f4f5]">
+                {statusFilter === 'ALL' ? 'All Matches' : statusFilter}
+              </span>
+            </div>
+            <div className="bg-[#09090b] border border-[#27272a] p-2.5 rounded-lg col-span-2 sm:col-span-1">
+              <span className="text-[10px] text-[#a1a1aa] uppercase font-bold block">Scope</span>
+              <span className="text-xs font-bold text-purple-400">
+                Broker Personal Portfolio
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Bookings List Cards */}
@@ -360,19 +393,27 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
                       {formatTimeDisplay(b.start_time)} – {formatTimeDisplay(b.end_time)}
                     </span>
 
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        isCancelled
-                          ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                          : isPaid
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : isPartial
-                          ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                      }`}
-                    >
-                      {isCancelled ? 'CANCELLED' : b.payment_status}
-                    </span>
+                    {isOwner && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          isCancelled
+                            ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                            : isPaid
+                            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                            : isPartial
+                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                            : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        }`}
+                      >
+                        {isCancelled ? 'CANCELLED' : b.payment_status}
+                      </span>
+                    )}
+
+                    {b.booking_source === 'BROKER' && isOwner && b.broker && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-purple-950/60 text-purple-300 border border-purple-500/30 font-bold">
+                        {b.broker.name} ({b.broker.code})
+                      </span>
+                    )}
 
                     {b.is_conflict_override && (
                       <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1">
@@ -385,11 +426,15 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
                     <span className="text-sm font-bold text-[#f4f4f5]">
                       {b.customer?.name}
                     </span>
-                    {b.customer?.team_name && (
+                    {b.team_b_name ? (
+                      <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                        <Users className="w-3 h-3" /> {b.team_a_name || b.customer?.name} vs {b.team_b_name}
+                      </span>
+                    ) : b.customer?.team_name ? (
                       <span className="text-xs text-emerald-400 font-medium">
                         • {b.customer.team_name}
                       </span>
-                    )}
+                    ) : null}
                     <span className="text-xs font-mono text-[#a1a1aa]">
                       +91 {b.customer?.phone}
                     </span>
@@ -404,20 +449,26 @@ export const BookingsPage: React.FC<BookingsPageProps> = ({
 
                 {/* Right: Financial Summary & Actions */}
                 <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#27272a]">
-                  <div className="text-right">
-                    <div className="text-xs font-bold font-mono-numeric text-[#f4f4f5]">
-                      {formatCurrency(b.total_amount)}
+                  {isOwner ? (
+                    <div className="text-right">
+                      <div className="text-xs font-bold font-mono-numeric text-[#f4f4f5]">
+                        {formatCurrency(b.total_amount)}
+                      </div>
+                      {pendingAmt > 0 && !isCancelled ? (
+                        <div className="text-[11px] font-bold font-mono-numeric text-amber-400">
+                          Due: {formatCurrency(pendingAmt)}
+                        </div>
+                      ) : isPaid ? (
+                        <div className="text-[11px] font-semibold text-emerald-400 flex items-center gap-0.5 justify-end">
+                          <CheckCircle2 className="w-3 h-3" /> Settled
+                        </div>
+                      ) : null}
                     </div>
-                    {pendingAmt > 0 && !isCancelled ? (
-                      <div className="text-[11px] font-bold font-mono-numeric text-amber-400">
-                        Due: {formatCurrency(pendingAmt)}
-                      </div>
-                    ) : isPaid ? (
-                      <div className="text-[11px] font-semibold text-emerald-400 flex items-center gap-0.5 justify-end">
-                        <CheckCircle2 className="w-3 h-3" /> Settled
-                      </div>
-                    ) : null}
-                  </div>
+                  ) : (
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30">
+                      My Booking
+                    </span>
+                  )}
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5">

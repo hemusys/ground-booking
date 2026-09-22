@@ -11,11 +11,14 @@ import {
   ChevronLeft, 
   ChevronRight,
   Calendar as CalendarIcon,
-  Search
+  Search,
+  Briefcase,
+  LayoutDashboard
 } from 'lucide-react';
 import { addDays, format, parseISO, subDays } from 'date-fns';
 import { MiniCalendarPicker } from './ui/MiniCalendarPicker';
 import { InstallPwaButton } from './ui/InstallPwaButton';
+import { RoleSwitcher } from './ui/RoleSwitcher';
 
 interface HeaderProps {
   stats?: {
@@ -34,7 +37,8 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
     selectedDate, 
     setSelectedDate, 
     openQuickBook, 
-    openFacilityManager 
+    openFacilityManager,
+    currentRole
   } = useUIStore();
 
   const isToday = selectedDate === format(new Date(), 'yyyy-MM-dd');
@@ -55,24 +59,30 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [openQuickBook, selectedDate]);
 
+  const isOwner = currentRole === 'OWNER';
+
   return (
     <header className="sticky top-0 z-30 bg-[#09090b]/95 backdrop-blur-md border-b border-[#27272a] px-3 sm:px-6 py-2.5">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
         {/* Brand & Date Navigation */}
         <div className="flex items-center justify-between gap-3">
-          <Link to="/" className="flex items-center gap-2 group">
+          <Link to={isOwner ? '/' : '/broker-dashboard'} className="flex items-center gap-2 group">
             <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-base group-hover:bg-emerald-500/20 transition-colors">
               🏏
             </div>
             <div>
               <h1 className="text-base sm:text-lg font-bold tracking-tight text-[#f4f4f5] leading-none flex items-center gap-1.5">
                 Ground Manager
-                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono font-normal">
-                  OWNER
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono font-normal border ${
+                  isOwner
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                }`}>
+                  {isOwner ? 'OWNER' : 'BROKER'}
                 </span>
               </h1>
               <p className="text-[11px] text-[#a1a1aa] mt-0.5 hidden sm:block">
-                Cricket Ground & Net Operations
+                {isOwner ? 'Cricket Ground & Net Operations' : 'Broker Booking Portal'}
               </p>
             </div>
           </Link>
@@ -111,6 +121,9 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
               onSelectDate={(newDate) => setSelectedDate(newDate)}
               className="hidden sm:inline-block"
             />
+
+            {/* Role Switcher */}
+            <RoleSwitcher />
           </div>
         </div>
 
@@ -118,81 +131,143 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
         <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-4 overflow-x-auto pb-1 sm:pb-0">
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-1 bg-[#18181b] border border-[#27272a] p-1 rounded-lg text-xs font-medium">
-            <Link
-              to="/"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname === '/'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              Timeline
-            </Link>
-            <Link
-              to="/calendar"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname.startsWith('/calendar')
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <CalendarIcon className="w-3.5 h-3.5 text-emerald-400" />
-              Calendar
-            </Link>
-            <Link
-              to="/bookings"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname === '/bookings'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <Search className="w-3.5 h-3.5 text-emerald-400" />
-              Search
-            </Link>
-            <Link
-              to="/due"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname === '/due'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-              Due Collections
-              {dueCount > 0 && (
-                <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold">
-                  {dueCount}
-                </span>
-              )}
-            </Link>
-            <Link
-              to="/customers"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname.startsWith('/customers')
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <Users className="w-3.5 h-3.5" />
-              Customers
-            </Link>
-            <Link
-              to="/reconciliation"
-              className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
-                location.pathname === '/reconciliation'
-                  ? 'bg-[#27272a] text-[#f4f4f5]'
-                  : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
-              }`}
-            >
-              <span className="text-xs">⚖️</span>
-              Reconcile
-            </Link>
+            {isOwner ? (
+              <>
+                <Link
+                  to="/"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Timeline
+                </Link>
+                <Link
+                  to="/calendar"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname.startsWith('/calendar')
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <CalendarIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  Calendar
+                </Link>
+                <Link
+                  to="/bookings"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/bookings'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5 text-emerald-400" />
+                  Search
+                </Link>
+                <Link
+                  to="/brokers"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname.startsWith('/brokers')
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Briefcase className="w-3.5 h-3.5 text-amber-400" />
+                  Brokers
+                </Link>
+                <Link
+                  to="/due"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/due'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                  Due Collections
+                  {dueCount > 0 && (
+                    <span className="ml-1 px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-mono font-bold">
+                      {dueCount}
+                    </span>
+                  )}
+                </Link>
+                <Link
+                  to="/customers"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname.startsWith('/customers')
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  Customers
+                </Link>
+                <Link
+                  to="/reconciliation"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/reconciliation'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <span className="text-xs">⚖️</span>
+                  Reconcile
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/broker-dashboard"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/broker-dashboard'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5 text-emerald-400" />
+                  My Dashboard
+                </Link>
+                <Link
+                  to="/"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Ground Timeline
+                </Link>
+                <Link
+                  to="/calendar"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname.startsWith('/calendar')
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <CalendarIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  Availability Calendar
+                </Link>
+                <Link
+                  to="/bookings"
+                  className={`px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors ${
+                    location.pathname === '/bookings'
+                      ? 'bg-[#27272a] text-[#f4f4f5]'
+                      : 'text-[#a1a1aa] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  <Search className="w-3.5 h-3.5 text-emerald-400" />
+                  My Bookings
+                </Link>
+              </>
+            )}
           </nav>
 
-          {/* Real-time Collected & Pending Totals */}
-          {stats && (
+          {/* Real-time Collected & Pending Totals (Owner Only) */}
+          {isOwner && stats && (
             <div className="flex items-center gap-2 text-xs">
               <div className="px-2.5 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -221,14 +296,16 @@ export const Header: React.FC<HeaderProps> = ({ stats, dueCount = 0 }) => {
           {/* PWA Install Action */}
           <InstallPwaButton />
 
-          {/* Settings Trigger */}
-          <button
-            onClick={openFacilityManager}
-            className="p-2 rounded-lg bg-[#18181b] border border-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] transition-colors"
-            title="Manage Facilities & Pricing"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          {/* Settings Trigger (Owner Only) */}
+          {isOwner && (
+            <button
+              onClick={openFacilityManager}
+              className="p-2 rounded-lg bg-[#18181b] border border-[#27272a] text-[#a1a1aa] hover:text-[#f4f4f5] hover:bg-[#27272a] transition-colors"
+              title="Manage Facilities & Pricing"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Primary Quick Book Action */}
           <button

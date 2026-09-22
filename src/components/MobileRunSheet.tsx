@@ -4,7 +4,9 @@ import { formatCurrency, formatTimeDisplay } from '../lib/utils';
 import { buildWhatsAppBookingLink } from '../lib/whatsapp';
 import { formatDurationLabel } from '../lib/time';
 import { differenceInMinutes, parseISO } from 'date-fns';
-import { Phone, MessageSquare, DollarSign, Clock, CheckCircle2, AlertCircle, Plus } from 'lucide-react';
+import { Phone, MessageSquare, DollarSign, Clock, CheckCircle2, AlertCircle, Plus, Lock, Users } from 'lucide-react';
+import { useUIStore } from '../stores/useUIStore';
+import { getMaskedBookingsForRole } from '../lib/api';
 
 interface MobileRunSheetProps {
   bookings: Booking[];
@@ -19,7 +21,12 @@ export const MobileRunSheet: React.FC<MobileRunSheetProps> = ({
   onCollectPayment,
   onOpenQuickBook,
 }) => {
-  if (bookings.length === 0) {
+  const { currentRole, activeBrokerId } = useUIStore();
+  const displayBookings = React.useMemo(() => {
+    return getMaskedBookingsForRole(bookings, currentRole, activeBrokerId);
+  }, [bookings, currentRole, activeBrokerId]);
+
+  if (displayBookings.length === 0) {
     return (
       <div className="p-8 text-center bg-[#18181b] border border-[#27272a] rounded-2xl space-y-3 my-2">
         <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 mx-auto flex items-center justify-center text-xl">
@@ -44,13 +51,44 @@ export const MobileRunSheet: React.FC<MobileRunSheetProps> = ({
 
   return (
     <div className="space-y-2.5 my-2">
-      {bookings.map((b) => {
+      {displayBookings.map((b) => {
+        const isMasked = b.is_masked;
         const isPaid = b.payment_status === 'FULLY_PAID';
         const isPartial = b.payment_status === 'PARTIALLY_PAID';
         const pending = b.pending_amount || 0;
 
         const durationMins = differenceInMinutes(parseISO(b.end_time), parseISO(b.start_time));
         const formattedDuration = formatDurationLabel(durationMins);
+
+        if (isMasked) {
+          return (
+            <div
+              key={b.id}
+              onClick={() => onBookingClick(b)}
+              className="p-3.5 rounded-xl border border-zinc-700 bg-zinc-900/80 transition-all shadow-md active:scale-[0.99]"
+            >
+              <div className="flex items-center justify-between gap-2 pb-2 border-b border-zinc-800">
+                <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-zinc-300">
+                  <Clock className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                  <span>{formatTimeDisplay(b.start_time)} – {formatTimeDisplay(b.end_time)}</span>
+                  <span className="text-[10px] text-zinc-500 font-normal font-sans">
+                    ({formattedDuration})
+                  </span>
+                </div>
+                <span className="text-[10px] px-2 py-0.5 rounded font-mono font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">
+                  {b.facility?.name}
+                </span>
+              </div>
+              <div className="py-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-zinc-300 font-bold text-sm">
+                  <Lock className="w-4 h-4 text-zinc-400" />
+                  <span>SLOT BOOKED</span>
+                </div>
+                <span className="text-xs text-zinc-500 font-medium">Unavailable</span>
+              </div>
+            </div>
+          );
+        }
 
         const whatsAppLink = buildWhatsAppBookingLink({
           phone: b.customer?.phone || '',
@@ -103,7 +141,12 @@ export const MobileRunSheet: React.FC<MobileRunSheetProps> = ({
                 <div className="font-bold text-sm text-[#f4f4f5]">
                   {b.customer?.name}
                 </div>
-                {b.customer?.team_name ? (
+                {b.team_b_name ? (
+                  <div className="text-xs text-emerald-400 font-semibold mt-0.5 flex items-center gap-1">
+                    <Users className="w-3 h-3" />
+                    <span>{b.team_a_name || b.customer?.name} vs {b.team_b_name}</span>
+                  </div>
+                ) : b.customer?.team_name ? (
                   <div className="text-xs text-emerald-400 font-medium mt-0.5">
                     🏏 {b.customer.team_name}
                   </div>
@@ -114,25 +157,33 @@ export const MobileRunSheet: React.FC<MobileRunSheetProps> = ({
                 )}
               </div>
 
-              {/* Price & Payment Pill */}
-              <div className="text-right">
-                <div className="font-mono-numeric font-bold text-sm text-[#f4f4f5]">
-                  {formatCurrency(b.total_amount)}
+              {/* Price & Payment Pill (Owner only) */}
+              {currentRole === 'OWNER' ? (
+                <div className="text-right">
+                  <div className="font-mono-numeric font-bold text-sm text-[#f4f4f5]">
+                    {formatCurrency(b.total_amount)}
+                  </div>
+                  {isPaid ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-semibold mt-0.5">
+                      <CheckCircle2 className="w-3 h-3" /> Paid Full
+                    </span>
+                  ) : isPartial ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold font-mono mt-0.5">
+                      <AlertCircle className="w-3 h-3" /> Due: ₹{pending}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-rose-400 font-bold font-mono mt-0.5">
+                      UNPAID (₹{b.total_amount})
+                    </span>
+                  )}
                 </div>
-                {isPaid ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-semibold mt-0.5">
-                    <CheckCircle2 className="w-3 h-3" /> Paid Full
+              ) : (
+                <div className="text-right">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/30">
+                    My Booking
                   </span>
-                ) : isPartial ? (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-amber-400 font-bold font-mono mt-0.5">
-                    <AlertCircle className="w-3 h-3" /> Due: ₹{pending}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-[10px] text-rose-400 font-bold font-mono mt-0.5">
-                    UNPAID (₹{b.total_amount})
-                  </span>
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
             {/* Bottom Actions Row: One-tap Call, WhatsApp, Settle */}
@@ -161,7 +212,7 @@ export const MobileRunSheet: React.FC<MobileRunSheetProps> = ({
                 </a>
               </div>
 
-              {pending > 0 && (
+              {currentRole === 'OWNER' && pending > 0 && (
                 <button
                   type="button"
                   onClick={(e) => {

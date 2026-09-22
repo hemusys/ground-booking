@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { format } from 'date-fns';
 
+import { UserRole } from '../types';
+
 export interface QuickBookDraft {
   facilityId?: string;
   date?: string;
@@ -8,6 +10,9 @@ export interface QuickBookDraft {
   durationMins?: number;
   customerPhone?: string;
   customerName?: string;
+  teamAName?: string;
+  teamBName?: string;
+  brokerId?: string;
 }
 
 export interface ToastNotification {
@@ -27,6 +32,10 @@ interface UIStoreState {
   mobileViewMode: 'runsheet' | 'matrix';
   toast: ToastNotification | null;
 
+  // Role System
+  currentRole: UserRole;
+  activeBrokerId: string | null; // e.g. "br-1"
+
   // Actions
   setSelectedDate: (date: string) => void;
   openQuickBook: (draft?: QuickBookDraft) => void;
@@ -40,6 +49,8 @@ interface UIStoreState {
   setMobileViewMode: (mode: 'runsheet' | 'matrix') => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info', durationMs?: number) => void;
   clearToast: () => void;
+  setUserRole: (role: UserRole, brokerId?: string | null) => void;
+  setActiveBroker: (brokerId: string) => void;
 }
 
 export const useUIStore = create<UIStoreState>((set, get) => ({
@@ -51,6 +62,8 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
   isFacilityManagerOpen: false,
   mobileViewMode: 'runsheet',
   toast: null,
+  currentRole: 'OWNER',
+  activeBrokerId: 'br-1', // Default selected broker profile when switching to broker mode
 
   setSelectedDate: (date) => set({ selectedDate: date }),
   openQuickBook: (draft) => set({ isQuickBookOpen: true, quickBookDraft: draft || null }),
@@ -72,4 +85,9 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
     }, durationMs);
   },
   clearToast: () => set({ toast: null }),
+  setUserRole: (role, brokerId) => set((state) => ({
+    currentRole: role,
+    activeBrokerId: role === 'BROKER' ? (brokerId || state.activeBrokerId || 'br-1') : state.activeBrokerId,
+  })),
+  setActiveBroker: (brokerId) => set({ activeBrokerId: brokerId, currentRole: 'BROKER' }),
 }));

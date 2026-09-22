@@ -10,6 +10,8 @@ import { CustomerProfilePage } from './pages/CustomerProfilePage';
 import { ReconciliationPage } from './pages/ReconciliationPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { BookingsPage } from './pages/BookingsPage';
+import { BrokersPage } from './pages/BrokersPage';
+import { BrokerDashboardPage } from './pages/BrokerDashboardPage';
 import { useUIStore } from './stores/useUIStore';
 import { 
   fetchFacilities, 
@@ -156,6 +158,24 @@ function AppContent() {
             element={
               <ReconciliationPage
                 refetchAll={handleRefetchAll}
+              />
+            }
+          />
+          <Route
+            path="/brokers"
+            element={
+              <BrokersPage
+                bookings={allBookings}
+              />
+            }
+          />
+          <Route
+            path="/broker-dashboard"
+            element={
+              <BrokerDashboardPage
+                bookings={allBookings}
+                facilities={facilities}
+                refetch={handleRefetchAll}
               />
             }
           />

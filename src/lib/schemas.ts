@@ -9,6 +9,13 @@ export const quickBookingSchema = z
     customer_phone: z.string().min(5, 'Phone number must be at least 5 digits'),
     customer_name: z.string().min(1, 'Customer name is required'),
     team_name: z.string().optional(),
+    team_a_name: z.string().optional(),
+    team_b_name: z.string().optional().nullable(),
+    booking_source: z.enum(['DIRECT', 'BROKER', 'ONLINE']).optional(),
+    broker_id: z.string().optional().nullable(),
+    discount_type: z.enum(['NONE', 'PERCENTAGE', 'FIXED']).optional(),
+    discount_value: z.number().optional(),
+    discount_reason: z.string().optional().nullable(),
     total_amount: z.number().min(0, 'Total amount must be greater than or equal to 0'),
     advance_paid: z.number().min(0, 'Advance paid must be greater than or equal to 0'),
     custom_pending_amount: z
@@ -20,6 +27,10 @@ export const quickBookingSchema = z
     allow_due_override: z.boolean().default(false),
     payment_method: z.enum(['UPI', 'CASH', 'CARD']),
     notes: z.string().optional(),
+    repeat_type: z.enum(['NONE', 'DAILY', 'WEEKLY', 'CUSTOM_WEEKDAYS']).optional(),
+    repeat_end_date: z.string().optional(),
+    repeat_weekdays: z.array(z.enum(['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'])).optional(),
+    allow_blacklist_override: z.boolean().optional(),
   })
   .superRefine((data, ctx) => {
     // 1. Validate start and end times

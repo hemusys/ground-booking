@@ -1,12 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Facility, QuickBookFormData, RepeatType, Weekday, CustomerSummary, RecurrenceConflictResult } from '../types';
+import { 
+  Facility, 
+  QuickBookFormData, 
+  RepeatType, 
+  Weekday, 
+  CustomerSummary, 
+  RecurrenceConflictResult,
+  Broker,
+  BookingSource,
+  DiscountType,
+  DiscountReason
+} from '../types';
 import { 
   findCustomerByPhone, 
   checkBookingConflict, 
   fetchCustomerSummaries, 
   generateRecurringDates, 
   analyzeRecurrenceConflicts,
-  createRecurringBookings
+  createRecurringBookings,
+  fetchBrokers
 } from '../lib/api';
 import { formatCurrency, formatDateDisplay } from '../lib/utils';
 import { createSafeBookingInterval, formatDurationLabel } from '../lib/time';
@@ -26,7 +38,11 @@ import {
   Repeat,
   Calendar,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Tag,
+  Briefcase,
+  Swords,
+  Percent
 } from 'lucide-react';
 import { format, addWeeks, parseISO } from 'date-fns';
 
@@ -63,21 +79,37 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
   customerName: initName,
   onSuccess,
 }) => {
+  const { showToast, currentRole, activeBrokerId } = useUIStore();
+
   const [facilityId, setFacilityId] = useState<string>('');
   const [date, setDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
   const [startTime, setStartTime] = useState<string>('06:00');
   const [endTime, setEndTime] = useState<string>('08:30');
 
-  // Customer State
+  // Team vs Team Matchup & Contact
+  const [teamAName, setTeamAName] = useState<string>('');
+  const [teamBName, setTeamBName] = useState<string>('');
   const [phone, setPhone] = useState<string>('');
   const [name, setName] = useState<string>('');
-  const [teamName, setTeamName] = useState<string>('');
   const [existingCustomer, setExistingCustomer] = useState<CustomerSummary | null>(null);
   const [allowBlacklistOverride, setAllowBlacklistOverride] = useState<boolean>(false);
   const [quickCustomers, setQuickCustomers] = useState<CustomerSummary[]>([]);
-  const { showToast } = useUIStore();
 
-  // Recurring Bookings State (Priority 1)
+  // Source & Broker Attribution
+  const [brokers, setBrokers] = useState<Broker[]>([]);
+  const [bookingSource, setBookingSource] = useState<BookingSource>(
+    currentRole === 'BROKER' ? 'BROKER' : 'DIRECT'
+  );
+  const [brokerId, setBrokerId] = useState<string | null>(
+    currentRole === 'BROKER' ? activeBrokerId : null
+  );
+
+  // Special Discounts
+  const [discountType, setDiscountType] = useState<DiscountType>('NONE');
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [discountReason, setDiscountReason] = useState<string>('REGULAR_CUSTOMER');
+
+  // Recurring Bookings State
   const [repeatType, setRepeatType] = useState<RepeatType>('NONE');
   const [repeatEndDate, setRepeatEndDate] = useState<string>(format(addWeeks(new Date(), 4), 'yyyy-MM-dd'));
   const [repeatWeekdays, setRepeatWeekdays] = useState<Weekday[]>(['MON', 'WED', 'FRI']);
@@ -120,7 +152,10 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
       setEndTime(`${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`);
     }
     if (initPhone) setPhone(initPhone);
-    if (initName) setName(initName);
+    if (initName) {
+      setName(initName);
+      setTeamAName(initName);
+    }
 
     setRepeatType('NONE');
     setRecurrenceConflictResult(null);
@@ -131,15 +166,27 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
     setIsPendingManuallyEdited(false);
     setPendingAdjustmentReason('');
     setAllowDueOverride(false);
+    setDiscountType('NONE');
+    setDiscountValue(0);
+
+    if (currentRole === 'BROKER') {
+      setBookingSource('BROKER');
+      setBrokerId(activeBrokerId);
+    } else {
+      setBookingSource('DIRECT');
+      setBrokerId(null);
+    }
+
+    fetchBrokers().then(setBrokers).catch(console.error);
 
     fetchCustomerSummaries()
       .then(summaries => {
         setQuickCustomers(summaries.slice(0, 4));
       })
       .catch(() => {});
-  }, [isOpen, initialFacilityId, initialDate, initialTime, initPhone, initName]);
+  }, [isOpen, initialFacilityId, initialDate, initialTime, initPhone, initName, currentRole, activeBrokerId]);
 
-  // 2. Auto-calculate duration & total fee when start_time or end_time changes
+  // 2. Auto-calculate duration, base fee & discount
   const [sh, sm] = startTime.split(':').map(Number);
   const [eh, em] = endTime.split(':').map(Number);
   const startMinsTotal = sh * 60 + sm;
@@ -149,17 +196,25 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
 
   const currentFacilityRate = facilities.find(f => f.id === facilityId)?.hourly_rate || 0;
 
+  const baseFee = (currentFacilityRate > 0 && calculatedDurationMins > 0)
+    ? Math.round(currentFacilityRate * (calculatedDurationMins / 60))
+    : 0;
+
+  const discountAmount = discountType === 'PERCENTAGE'
+    ? Math.round(baseFee * (Math.max(0, Math.min(100, Number(discountValue) || 0)) / 100))
+    : discountType === 'FIXED'
+    ? Math.min(baseFee, Math.max(0, Number(discountValue) || 0))
+    : 0;
+
+  const netPayableFee = Math.max(0, baseFee - discountAmount);
+
   useEffect(() => {
     if (!isOpen) return;
-    if (currentFacilityRate > 0 && calculatedDurationMins > 0) {
-      const hours = calculatedDurationMins / 60;
-      const computedFee = Math.round(currentFacilityRate * hours);
-      setTotalAmount(computedFee);
-      if (!isPendingManuallyEdited) {
-        setCustomPendingAmount(Math.max(0, computedFee - advancePaid));
-      }
+    setTotalAmount(netPayableFee);
+    if (!isPendingManuallyEdited) {
+      setCustomPendingAmount(Math.max(0, netPayableFee - advancePaid));
     }
-  }, [isOpen, facilityId, currentFacilityRate, calculatedDurationMins, advancePaid, isPendingManuallyEdited]);
+  }, [isOpen, netPayableFee, advancePaid, isPendingManuallyEdited]);
 
   // 3. Keep pending balance synchronized if not manually edited
   useEffect(() => {
@@ -169,7 +224,7 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
     }
   }, [isOpen, totalAmount, advancePaid, isPendingManuallyEdited]);
 
-  // 4. Phone substring auto-lookup for customer context & blacklist detection (Priority 3)
+  // 4. Phone substring auto-lookup for customer context & blacklist detection
   useEffect(() => {
     if (!isOpen) return;
     const cleanPhone = phone.replace(/\D/g, '');
@@ -179,7 +234,7 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
         const match = summaries.find(c => c.phone.replace(/\D/g, '').includes(cleanPhone));
         if (match) {
           setName(match.name);
-          setTeamName(match.team_name || '');
+          if (!teamAName) setTeamAName(match.team_name || match.name);
           setExistingCustomer(match);
         } else {
           setExistingCustomer(null);
@@ -235,14 +290,24 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
       return;
     }
 
-    const formDataPayload = {
+    const assignedTeamA = teamAName.trim() || name.trim() || 'Team A';
+    const assignedTeamB = teamBName.trim() || null;
+
+    const formDataPayload: QuickBookFormData = {
       facility_id: facilityId,
       date,
       start_time: startTime,
       end_time: endTime,
       customer_phone: cleanPhone,
       customer_name: name.trim(),
-      team_name: teamName.trim() || undefined,
+      team_name: assignedTeamA,
+      team_a_name: assignedTeamA,
+      team_b_name: assignedTeamB || undefined,
+      booking_source: bookingSource,
+      broker_id: bookingSource === 'BROKER' ? brokerId : null,
+      discount_type: discountType,
+      discount_value: Number(discountValue) || 0,
+      discount_reason: discountType !== 'NONE' ? discountReason : undefined,
       total_amount: Number(totalAmount),
       advance_paid: Number(advancePaid),
       custom_pending_amount: isPendingManuallyEdited ? Number(customPendingAmount) : null,
@@ -286,8 +351,8 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
           return;
         } else {
           // All available, proceed
-          await createRecurringBookings(formDataPayload as QuickBookFormData, conflictAnalysis.availableDates);
-          if (onSuccess) await onSuccess(formDataPayload as QuickBookFormData, openWhatsApp);
+          await createRecurringBookings(formDataPayload, conflictAnalysis.availableDates);
+          if (onSuccess) await onSuccess(formDataPayload, openWhatsApp);
           showToast(`🏏 ${conflictAnalysis.availableDates.length} recurring sessions created successfully!`, 'success');
           onClose();
           return;
@@ -308,7 +373,7 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
 
     setIsSubmitting(true);
     try {
-      await onSuccess(formDataPayload as QuickBookFormData, openWhatsApp);
+      await onSuccess(formDataPayload, openWhatsApp);
       showToast('🏏 Booking confirmed successfully!', 'success');
       onClose();
     } catch (err: any) {
@@ -322,6 +387,9 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
     if (!recurrenceConflictResult) return;
     setIsSubmitting(true);
     try {
+      const assignedTeamA = teamAName.trim() || name.trim() || 'Team A';
+      const assignedTeamB = teamBName.trim() || null;
+
       const formDataPayload: QuickBookFormData = {
         facility_id: facilityId,
         date,
@@ -329,7 +397,14 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
         end_time: endTime,
         customer_phone: phone.replace(/\D/g, ''),
         customer_name: name.trim(),
-        team_name: teamName.trim() || undefined,
+        team_name: assignedTeamA,
+        team_a_name: assignedTeamA,
+        team_b_name: assignedTeamB || undefined,
+        booking_source: bookingSource,
+        broker_id: bookingSource === 'BROKER' ? brokerId : null,
+        discount_type: discountType,
+        discount_value: Number(discountValue) || 0,
+        discount_reason: discountType !== 'NONE' ? discountReason : undefined,
         total_amount: Number(totalAmount),
         advance_paid: Number(advancePaid),
         payment_method: paymentMethod,
@@ -367,10 +442,10 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
             </span>
             <div>
               <h2 className="text-base font-bold text-[#f4f4f5] leading-none">
-                Quick Booking & Academy Series
+                {currentRole === 'BROKER' ? 'Create Broker Booking' : 'Quick Booking & Academy Series'}
               </h2>
               <p className="text-[11px] text-[#a1a1aa] mt-0.5">
-                Single match or automated multi-session recurrence
+                Match scheduling with team matchups & discounts
               </p>
             </div>
           </div>
@@ -480,7 +555,247 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
             )}
           </div>
 
-          {/* Priority 1: Recurring Booking Section */}
+          {/* Section: Team vs Team Matchup & Contact */}
+          <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#f4f4f5]">
+              <Swords className="w-4 h-4 text-emerald-400" />
+              <span>Team Matchup & Contact</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Team A Name *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Strikers CC"
+                  value={teamAName}
+                  onChange={(e) => setTeamAName(e.target.value)}
+                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Team B Name <span className="text-[10px] text-[#71717a]">(Optional / TBD)</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Super Kings"
+                  value={teamBName}
+                  onChange={(e) => setTeamBName(e.target.value)}
+                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Contact Person *
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Rahul Verma"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                />
+                {validationErrors.customer_name && (
+                  <span className="text-[10px] text-rose-400 mt-0.5 block">{validationErrors.customer_name}</span>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Contact Phone *
+                </label>
+                <input
+                  type="tel"
+                  placeholder="e.g. 9876543210"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                />
+                {validationErrors.customer_phone && (
+                  <span className="text-[10px] text-rose-400 mt-0.5 block">{validationErrors.customer_phone}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Quick Customer Chips */}
+            {quickCustomers.length > 0 && (
+              <div className="pt-1 space-y-1">
+                <span className="text-[10px] text-[#71717a] font-bold tracking-wider uppercase block">
+                  ⚡ Quick Select Regulars
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {quickCustomers.map((c) => (
+                    <button
+                      key={c.id || c.phone}
+                      type="button"
+                      onClick={() => {
+                        setPhone(c.phone);
+                        setName(c.name);
+                        setTeamAName(c.team_name || c.name);
+                        setExistingCustomer(c);
+                      }}
+                      className="px-2 py-0.5 rounded-lg text-xs bg-[#09090b] text-[#a1a1aa] border border-[#27272a] hover:bg-[#27272a] hover:text-[#f4f4f5] transition-all"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Booking Source & Broker Attribution */}
+          <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-[#f4f4f5]">
+              <Briefcase className="w-4 h-4 text-amber-400" />
+              <span>Booking Source & Attribution</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {(['DIRECT', 'BROKER', 'ONLINE'] as const).map((source) => {
+                const isSelected = bookingSource === source;
+                const isLocked = currentRole === 'BROKER';
+                return (
+                  <button
+                    key={source}
+                    type="button"
+                    disabled={isLocked && source !== 'BROKER'}
+                    onClick={() => {
+                      setBookingSource(source);
+                      if (source !== 'BROKER') setBrokerId(null);
+                    }}
+                    className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? 'bg-amber-500 text-zinc-950 border-amber-400 font-bold shadow-xs'
+                        : isLocked
+                        ? 'opacity-40 bg-[#09090b] text-[#71717a] border-[#27272a]'
+                        : 'bg-[#09090b] text-[#a1a1aa] border-[#27272a] hover:text-[#f4f4f5]'
+                    }`}
+                  >
+                    {source}
+                  </button>
+                );
+              })}
+            </div>
+
+            {bookingSource === 'BROKER' && (
+              <div className="pt-1 animate-in fade-in">
+                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                  Attributed Broker *
+                </label>
+                <select
+                  disabled={currentRole === 'BROKER'}
+                  value={brokerId || ''}
+                  onChange={(e) => setBrokerId(e.target.value || null)}
+                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500 disabled:opacity-75"
+                >
+                  <option value="">Select a Broker</option>
+                  {brokers.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code}) {!b.is_active ? ' - Disabled' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Special Discounts */}
+          <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-[#f4f4f5]">
+                <Tag className="w-4 h-4 text-emerald-400" />
+                <span>Special Discounts</span>
+              </div>
+              {discountType !== 'NONE' && (
+                <span className="text-[10px] text-emerald-400 font-mono font-bold">
+                  Saving: {formatCurrency(discountAmount)}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {(['NONE', 'PERCENTAGE', 'FIXED'] as const).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    setDiscountType(type);
+                    if (type === 'NONE') setDiscountValue(0);
+                  }}
+                  className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                    discountType === type
+                      ? 'bg-emerald-500 text-zinc-950 border-emerald-400 font-bold'
+                      : 'bg-[#09090b] text-[#a1a1aa] border-[#27272a] hover:text-[#f4f4f5]'
+                  }`}
+                >
+                  {type === 'NONE' ? 'No Discount' : type === 'PERCENTAGE' ? '% Percentage' : '₹ Fixed Flat'}
+                </button>
+              ))}
+            </div>
+
+            {discountType !== 'NONE' && (
+              <div className="space-y-2 pt-1 animate-in fade-in">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                      {discountType === 'PERCENTAGE' ? 'Discount Percentage (%)' : 'Discount Amount (₹)'}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={discountType === 'PERCENTAGE' ? 100 : baseFee}
+                      value={discountValue || ''}
+                      onChange={(e) => setDiscountValue(Number(e.target.value))}
+                      placeholder={discountType === 'PERCENTAGE' ? 'e.g. 10' : 'e.g. 500'}
+                      className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
+                      Discount Reason
+                    </label>
+                    <select
+                      value={discountReason}
+                      onChange={(e) => setDiscountReason(e.target.value)}
+                      className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-xs text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
+                    >
+                      <option value="REGULAR_CUSTOMER">Regular Customer</option>
+                      <option value="TOURNAMENT">Tournament</option>
+                      <option value="BROKER_OFFER">Broker Offer</option>
+                      <option value="OTHER">Other</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Live Reduction Breakdown */}
+                <div className="p-2.5 bg-[#09090b] border border-emerald-500/30 rounded-lg text-xs space-y-1">
+                  <div className="flex items-center justify-between text-[#a1a1aa]">
+                    <span>Standard Base Fee:</span>
+                    <span className="font-mono">{formatCurrency(baseFee)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-emerald-400 font-semibold">
+                    <span>Discount Applied:</span>
+                    <span className="font-mono">- {formatCurrency(discountAmount)} ({discountType === 'PERCENTAGE' ? `${discountValue}%` : 'Flat'})</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#f4f4f5] font-bold border-t border-[#27272a] pt-1">
+                    <span>Final Payable Fee:</span>
+                    <span className="font-mono text-emerald-400">{formatCurrency(netPayableFee)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Recurring Booking Section */}
           <div className="bg-[#18181b] border border-purple-500/30 p-3.5 rounded-xl space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
@@ -490,7 +805,6 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
               <span className="text-[10px] text-purple-400/80 font-mono">Auto Multi-Booking</span>
             </div>
 
-            {/* Repeat Type Tabs */}
             <div className="grid grid-cols-4 gap-1.5 p-1 bg-[#09090b] border border-[#27272a] rounded-lg">
               {(['NONE', 'DAILY', 'WEEKLY', 'CUSTOM_WEEKDAYS'] as const).map((type) => (
                 <button
@@ -510,7 +824,6 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
 
             {repeatType !== 'NONE' && (
               <div className="space-y-3 pt-1 animate-in fade-in">
-                {/* Custom Weekdays Selector */}
                 {repeatType === 'CUSTOM_WEEKDAYS' && (
                   <div>
                     <label className="block text-[11px] font-semibold text-[#a1a1aa] mb-1.5">
@@ -538,7 +851,6 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
                   </div>
                 )}
 
-                {/* Recurrence End Date */}
                 <div>
                   <label className="block text-[11px] font-semibold text-[#a1a1aa] mb-1">
                     Repeat Until Date:
@@ -552,7 +864,6 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
                   />
                 </div>
 
-                {/* Live Preview Calculation */}
                 <div className="p-2.5 rounded-lg bg-purple-950/30 border border-purple-500/30 flex items-center justify-between text-xs">
                   <div className="space-y-0.5">
                     <span className="text-[10px] uppercase font-bold text-purple-300 block">
@@ -568,179 +879,6 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Section 3: Customer Lookup & Instant Customer 360 Card (Priority 3) */}
-          <div className="bg-[#18181b] border border-[#27272a] p-3.5 rounded-xl space-y-2.5">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-semibold text-[#a1a1aa]">
-                  Customer Phone *
-                </label>
-                {existingCustomer && (
-                  <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
-                    <UserCheck className="w-3 h-3" /> Auto-filled Existing
-                  </span>
-                )}
-              </div>
-              <input
-                type="tel"
-                placeholder="e.g. 9876543210"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-sm font-mono text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
-              />
-              {validationErrors.customer_phone && (
-                <span className="text-[10px] text-rose-400 mt-0.5 block">{validationErrors.customer_phone}</span>
-              )}
-
-              {/* Quick Customer Chips */}
-              {quickCustomers.length > 0 && (
-                <div className="pt-2 space-y-1.5">
-                  <span className="text-[10px] text-[#71717a] font-bold tracking-wider uppercase block">
-                    ⚡ Quick Select Regulars
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {quickCustomers.map((c) => {
-                      const isSelected = phone === c.phone;
-                      return (
-                        <button
-                          key={c.id || c.phone}
-                          type="button"
-                          onClick={() => {
-                            setPhone(c.phone);
-                            setName(c.name);
-                            setTeamName(c.team_name || '');
-                            setExistingCustomer(c);
-                            setValidationErrors((prev) => {
-                              const updated = { ...prev };
-                              delete updated.customer_phone;
-                              delete updated.customer_name;
-                              return updated;
-                            });
-                          }}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all flex items-center gap-1.5 cursor-pointer ${
-                            isSelected
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-xs'
-                              : 'bg-[#09090b] text-[#a1a1aa] border-[#27272a] hover:bg-[#27272a] hover:text-[#f4f4f5]'
-                          }`}
-                        >
-                          <span className="text-emerald-400">👤</span>
-                          <span className="font-semibold">{c.name}</span>
-                          {c.team_name && (
-                            <span className="text-[10px] text-[#71717a] font-normal">({c.team_name})</span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Instant Customer 360 Card */}
-            {existingCustomer && (
-              <div className="p-3 rounded-xl bg-[#09090b] border border-[#27272a] space-y-2 animate-in fade-in">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-bold text-xs text-[#f4f4f5] block">
-                      {existingCustomer.name}
-                    </span>
-                    {existingCustomer.team_name && (
-                      <span className="text-[10px] text-emerald-400 font-medium">
-                        🏏 {existingCustomer.team_name}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#27272a] text-[#a1a1aa] font-mono">
-                    {existingCustomer.booking_count} bookings
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-[#27272a]">
-                  <div>
-                    <span className="text-[#71717a] block text-[9px] uppercase">Lifetime Spend</span>
-                    <span className="font-bold font-mono text-emerald-400">
-                      {formatCurrency(existingCustomer.total_spent)}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[#71717a] block text-[9px] uppercase">Outstanding Due</span>
-                    <span className={`font-bold font-mono ${
-                      existingCustomer.total_pending > 0 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {formatCurrency(existingCustomer.total_pending)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Overdue Warning Alert */}
-                {existingCustomer.total_pending > 3000 ? (
-                  <div className="p-2 rounded-lg bg-rose-950/50 border border-rose-500/60 text-rose-300 text-[11px] flex items-center gap-1.5 font-semibold">
-                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                    <span>Critical overdue: Owes {formatCurrency(existingCustomer.total_pending)}</span>
-                  </div>
-                ) : existingCustomer.total_pending > 0 ? (
-                  <div className="p-1.5 rounded-lg bg-amber-950/30 border border-amber-500/40 text-amber-300 text-[10px] flex items-center gap-1.5">
-                    <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
-                    <span>Customer has {formatCurrency(existingCustomer.total_pending)} unpaid balance.</span>
-                  </div>
-                ) : null}
-
-                {/* Blacklist Warning */}
-                {existingCustomer.is_blacklisted && (
-                  <div className="p-2 rounded-lg bg-rose-950/60 border border-rose-500 text-rose-200 text-xs space-y-1">
-                    <div className="flex items-center gap-1.5 font-bold text-rose-400">
-                      <ShieldAlert className="w-4 h-4 shrink-0" />
-                      <span>⚠️ Customer is Blacklisted</span>
-                    </div>
-                    <p className="text-[10px] text-rose-300">
-                      Reason: {existingCustomer.blacklist_reason || 'Disciplinary / Non-payment'}
-                    </p>
-                    <label className="flex items-center gap-1.5 text-[11px] text-[#f4f4f5] pt-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={allowBlacklistOverride}
-                        onChange={(e) => setAllowBlacklistOverride(e.target.checked)}
-                        className="rounded accent-rose-500"
-                      />
-                      <span>Override Blacklist (Manager Approval)</span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
-                  Customer Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Rahul Verma"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
-                />
-                {validationErrors.customer_name && (
-                  <span className="text-[10px] text-rose-400 mt-0.5 block">{validationErrors.customer_name}</span>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-[#a1a1aa] mb-1">
-                  Team Name (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Strikers CC"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  className="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-1.5 text-sm text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
-                />
-              </div>
-            </div>
           </div>
 
           {/* Section 4: Financials & Editable Due */}
@@ -873,7 +1011,7 @@ export const QuickBookDrawer: React.FC<QuickBookDrawerProps> = ({
             </label>
             <input
               type="text"
-              placeholder="e.g. Weekend under-19 nets session"
+              placeholder="e.g. Weekend match, balls arranged"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="w-full bg-[#18181b] border border-[#27272a] rounded-lg px-3 py-1.5 text-xs text-[#f4f4f5] focus:outline-hidden focus:border-emerald-500"
